@@ -31,7 +31,12 @@ yarn-error.*
 *.pem
 
 # local env files
+.env
 .env*.local
+.vscode/
+.tmp_stitch/
+TODO.md
+*.log
 
 # typescript
 *.tsbuildinfo
