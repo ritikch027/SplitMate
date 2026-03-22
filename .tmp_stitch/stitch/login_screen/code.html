@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>SplitMate - Login</title>
+<!-- Tailwind CSS v3 with Plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Inter Font -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              violet: '#7c3bed',
+              cyan: '#06b6d4',
+              dark: '#0A0F1E',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          borderRadius: {
+            'custom': '8px',
+          }
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-animations">
+    @keyframes orbit-1 {
+      0% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(30px, -50px) scale(1.1); }
+      66% { transform: translate(-20px, 20px) scale(0.9); }
+      100% { transform: translate(0, 0) scale(1); }
+    }
+    @keyframes orbit-2 {
+      0% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(-40px, 40px) scale(1.2); }
+      66% { transform: translate(40px, -20px) scale(0.8); }
+      100% { transform: translate(0, 0) scale(1); }
+    }
+    .animate-orb-1 {
+      animation: orbit-1 15s infinite ease-in-out;
+    }
+    .animate-orb-2 {
+      animation: orbit-2 18s infinite ease-in-out;
+    }
+    .glass-effect {
+      background: rgba(255, 255, 255, 0.03);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+  </style>
+</head>
+<body class="h-full bg-brand-dark font-sans text-white overflow-hidden flex flex-col items-center justify-center p-6">
+<!-- BEGIN: Background Elements -->
+<div class="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+<!-- Animated Orb 1 -->
+<div class="absolute top-[-10%] left-[-10%] w-[300px] h-[300px] bg-brand-violet opacity-20 blur-[100px] rounded-full animate-orb-1"></div>
+<!-- Animated Orb 2 -->
+<div class="absolute bottom-[-5%] right-[-5%] w-[350px] h-[350px] bg-brand-cyan opacity-15 blur-[120px] rounded-full animate-orb-2"></div>
+</div>
+<!-- END: Background Elements -->
+<!-- BEGIN: Login Container -->
+<main class="relative z-10 w-full max-w-sm flex flex-col items-center">
+<!-- BEGIN: Brand Header -->
+<header class="text-center mb-12" data-purpose="app-branding">
+<div class="w-16 h-16 bg-gradient-to-br from-brand-violet to-brand-cyan rounded-2xl flex items-center justify-center mb-6 mx-auto shadow-lg shadow-brand-violet/20">
+<svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M16 3h5v5"></path>
+<path d="M8 3H3v5"></path>
+<path d="M12 22v-8.3a4 4 0 0 0-1.172-2.828L3 3"></path>
+<path d="m15 13 6-6"></path>
+</svg>
+</div>
+<h1 class="text-3xl font-bold tracking-tight mb-2">SplitMate</h1>
+<p class="text-gray-400 text-sm">Splitting bills made effortless.</p>
+</header>
+<!-- END: Brand Header -->
+<!-- BEGIN: Login Form -->
+<section class="w-full glass-effect rounded-custom p-8 shadow-2xl" data-purpose="login-form-container">
+<form action="#" class="space-y-6" method="POST">
+<!-- Phone Number Input -->
+<div data-purpose="input-group">
+<label class="block text-xs font-medium text-gray-400 uppercase tracking-widest mb-3" for="phone">Phone Number</label>
+<div class="relative">
+<span class="absolute inset-y-0 left-0 flex items-center pl-4 text-gray-400 font-medium">
+              +1
+            </span>
+<input class="block w-full bg-white/5 border border-white/10 text-white rounded-custom py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-brand-violet focus:border-transparent transition-all placeholder:text-gray-600" id="phone" name="phone" placeholder="(555) 000-0000" required="" type="tel"/>
+</div>
+</div>
+<!-- Continue Button -->
+<button class="w-full bg-gradient-to-r from-brand-violet to-brand-cyan hover:opacity-90 text-white font-bold py-4 px-6 rounded-custom shadow-lg shadow-brand-violet/30 transition-all transform active:scale-[0.98]" type="submit">
+          Continue
+        </button>
+</form>
+</section>
+<!-- END: Login Form -->
+<!-- BEGIN: Footer Links -->
+<footer class="mt-8 text-center" data-purpose="footer-links">
+<p class="text-xs text-gray-500 mb-4">
+        By continuing, you agree to our 
+        <a class="text-gray-300 underline underline-offset-4 decoration-brand-violet/50 hover:text-white transition-colors" href="#">Terms</a> and 
+        <a class="text-gray-300 underline underline-offset-4 decoration-brand-violet/50 hover:text-white transition-colors" href="#">Privacy Policy</a>
+</p>
+<div class="flex items-center justify-center space-x-4">
+<div class="h-px w-8 bg-white/10"></div>
+<span class="text-[10px] text-gray-600 uppercase tracking-widest font-bold">Secure Fintech Grade</span>
+<div class="h-px w-8 bg-white/10"></div>
+</div>
+</footer>
+<!-- END: Footer Links -->
+</main>
+<!-- END: Login Container -->
+<script data-purpose="input-masking">
+    // Minimal phone formatting logic
+    const phoneInput = document.getElementById('phone');
+    phoneInput.addEventListener('input', function (e) {
+      let x = e.target.value.replace(/\D/g, '').match(/(\d{0,3})(\d{0,3})(\d{0,4})/);
+      e.target.value = !x[2] ? x[1] : '(' + x[1] + ') ' + x[2] + (x[3] ? '-' + x[3] : '');
+    });
+  </script>
+</body></html>
