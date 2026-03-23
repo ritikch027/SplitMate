@@ -13,42 +13,88 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
+import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
 import GroupCard from "../components/GroupCard";
 import MemberAvatar from "../components/MemberAvatar";
 import SkeletonLoader from "../components/SkeletonLoader";
 import { colors, fontSize, spacing } from "../constants/theme";
 import { useAuth } from "../context/useAuth";
+import {
+  calculateBalances,
+  formatCurrency,
+  getTotalOwe,
+  getTotalOwed,
+} from "../services/balanceCalculator";
+import { getUserExpenses } from "../services/expenseService";
 import { getUserGroups } from "../services/groupService";
+import { getUsersByIds } from "../services/userService";
 
-function StatCard({ label, value, valueStyle, delay }) {
+function StatCard({ label, value, valueStyle, delay, onPress }) {
   return (
-    <Animated.View entering={FadeInDown.delay(delay).springify()} style={styles.statCard}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={[styles.statValue, valueStyle]}>{value}</Text>
+    <Animated.View entering={FadeInDown.delay(delay).springify()} style={styles.statCardWrap}>
+      <TouchableOpacity activeOpacity={0.88} style={styles.statCard} onPress={onPress}>
+        <Text style={styles.statLabel}>{label}</Text>
+        <Text style={[styles.statValue, valueStyle]}>{value}</Text>
+      </TouchableOpacity>
     </Animated.View>
   );
 }
 
 export default function HomeScreen({ navigation }) {
   const { user, userProfile } = useAuth();
+  const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
 
   const [groups, setGroups] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [allExpenses, setAllExpenses] = useState([]);
+  const [memberProfilesById, setMemberProfilesById] = useState({});
 
   useEffect(() => {
     if (!user) return undefined;
 
-    const unsubscribe = getUserGroups(user.uid, (data) => {
+    const unsubscribeGroups = getUserGroups(user.uid, (data) => {
       setGroups(data);
       setLoading(false);
       setRefreshing(false);
     });
 
-    return unsubscribe;
+    const unsubscribeExpenses = getUserExpenses(user.uid, (expenses) => {
+      setAllExpenses(expenses);
+    });
+
+    return () => {
+      unsubscribeGroups();
+      unsubscribeExpenses();
+    };
   }, [user]);
+
+  useEffect(() => {
+    if (!groups.length) {
+      setMemberProfilesById({});
+      return;
+    }
+
+    const loadMemberProfiles = async () => {
+      const memberIds = [...new Set(groups.flatMap((group) => group.members || []))];
+      const result = await getUsersByIds(memberIds);
+
+      if (!result.success) return;
+
+      const nextProfiles = result.users.reduce((acc, profile) => {
+        acc[profile.id] = profile;
+        return acc;
+      }, {});
+
+      setMemberProfilesById(nextProfiles);
+    };
+
+    loadMemberProfiles();
+  }, [groups]);
 
   const filteredGroups = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -58,37 +104,54 @@ export default function HomeScreen({ navigation }) {
   }, [groups, search]);
 
   const totals = useMemo(() => {
-    let owed = 0;
-    let owe = 0;
+    if (!allExpenses.length || !groups.length) return { owed: 0, owe: 0 };
 
-    groups.forEach((group) => {
-      const marker = group.id.charCodeAt(0) % 2 === 0 ? 1 : -1;
-      const amount = ((group.members?.length || 1) * 210) / 10;
-
-      if (marker > 0) owed += amount;
-      else owe += amount;
+    // Aggregate all balances across groups
+    const allBalances = groups.flatMap((group) => {
+      const groupExpenses = allExpenses.filter((e) => e.groupId === group.id);
+      return calculateBalances(groupExpenses, group.members || [], user.uid);
     });
 
-    return { owed, owe };
-  }, [groups]);
+    return {
+      owed: getTotalOwed(allBalances),
+      owe: getTotalOwe(allBalances),
+    };
+  }, [allExpenses, groups, user?.uid]);
 
   const renderGroup = ({ item, index }) => {
-    const simulatedBalance = (item.id.charCodeAt(0) % 3) - 1;
-    const balanceAmount = simulatedBalance === 0 ? 0 : simulatedBalance * 85;
+    const groupExpenses = allExpenses.filter((e) => e.groupId === item.id);
+    const groupBalances = calculateBalances(
+      groupExpenses,
+      item.members || [],
+      user.uid,
+    );
+    const balanceAmount = groupBalances.reduce(
+      (sum, b) => sum + b.netBalance,
+      0,
+    );
+
+    const groupWithProfiles = {
+      ...item,
+      members: (item.members || []).map(
+        (memberId) => memberProfilesById[memberId] || memberId,
+      ),
+    };
 
     return (
       <Animated.View entering={FadeInDown.delay(index * 70).springify()}>
         <GroupCard
-          group={item}
+          group={groupWithProfiles}
           userBalance={balanceAmount}
-          onPress={() => navigation.navigate("GroupDetailsScreen", { groupId: item.id })}
+          onPress={() =>
+            navigation.navigate("GroupDetailsScreen", { groupId: item.id })
+          }
         />
       </Animated.View>
     );
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) + 12 }]}>
       <StatusBar barStyle="light-content" />
       <AnimatedBackdrop />
 
@@ -106,10 +169,16 @@ export default function HomeScreen({ navigation }) {
           />
         }
         ListHeaderComponent={
+          loading ? (
+            <SkeletonLoader variant="home" />
+          ) : (
           <>
-            <Animated.View entering={FadeInDown.springify()} style={styles.header}>
+            <Animated.View
+              entering={FadeInDown.springify()}
+              style={styles.header}
+            >
               <View>
-                <Text style={styles.kicker}>Good morning,</Text>
+                <Text style={styles.kicker}>Split smarter, stay clear</Text>
                 <Text style={styles.greeting}>
                   {userProfile?.name || userProfile?.phone || "SplitMate User"}
                 </Text>
@@ -129,7 +198,10 @@ export default function HomeScreen({ navigation }) {
               </TouchableOpacity>
             </Animated.View>
 
-            <Animated.View entering={FadeInDown.delay(110).springify()} style={styles.searchWrap}>
+            <Animated.View
+              entering={FadeInDown.delay(110).springify()}
+              style={styles.searchWrap}
+            >
               <Ionicons name="search" size={18} color="#657188" />
               <TextInput
                 value={search}
@@ -143,27 +215,33 @@ export default function HomeScreen({ navigation }) {
             <View style={styles.statsRow}>
               <StatCard
                 label="You are owed"
-                value={`Rs ${totals.owed.toFixed(2)}`}
+                value={formatCurrency(totals.owed)}
                 valueStyle={styles.owedValue}
                 delay={170}
+                onPress={() => navigation.navigate("BalanceBreakdownScreen", { mode: "owed" })}
               />
               <StatCard
                 label="You owe"
-                value={`Rs ${totals.owe.toFixed(2)}`}
+                value={formatCurrency(totals.owe)}
                 valueStyle={styles.oweValue}
                 delay={240}
+                onPress={() => navigation.navigate("BalanceBreakdownScreen", { mode: "owe" })}
               />
             </View>
 
-            <Animated.View entering={FadeInDown.delay(280)} style={styles.sectionRow}>
+            <Animated.View
+              entering={FadeInDown.delay(280)}
+              style={styles.sectionRow}
+            >
               <Text style={styles.sectionTitle}>Your Groups</Text>
               <Text style={styles.sectionLink}>See all</Text>
             </Animated.View>
           </>
+          )
         }
         ListEmptyComponent={
           loading ? (
-            <SkeletonLoader variant="card" count={4} />
+            null
           ) : (
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>No groups yet</Text>
@@ -177,7 +255,7 @@ export default function HomeScreen({ navigation }) {
 
       <TouchableOpacity
         activeOpacity={0.9}
-        style={styles.fab}
+        style={[styles.fab, { bottom: tabBarHeight + 22 }]}
         onPress={() => navigation.navigate("CreateGroupScreen")}
       >
         <Ionicons name="add" size={30} color="#fff" />
@@ -189,9 +267,8 @@ export default function HomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#10182B",
+    backgroundColor: "#020617",
     paddingHorizontal: 20,
-    paddingTop: 28,
   },
   listContent: {
     paddingBottom: 130,
@@ -204,28 +281,29 @@ const styles = StyleSheet.create({
   },
   kicker: {
     color: "#97A2B8",
-    fontSize: 16,
-    fontWeight: "500",
+    fontSize: 14,
+    fontWeight: "600",
+    letterSpacing: 0.3,
+    marginBottom: 4,
   },
   greeting: {
     color: "#F8FAFC",
     fontSize: 22,
     fontWeight: "800",
-    marginTop: 2,
   },
   profileButton: {
     padding: 2,
     borderRadius: 14,
     borderWidth: 2,
-    borderColor: colors.accent,
-    backgroundColor: "rgba(124,58,237,0.12)",
+    borderColor: "rgba(124,58,237,0.28)",
+    backgroundColor: "rgba(30,41,59,0.76)",
   },
   searchWrap: {
     height: 42,
     borderRadius: 10,
-    backgroundColor: "rgba(30,41,59,0.72)",
+    backgroundColor: "rgba(15,23,42,0.88)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.05)",
+    borderColor: "rgba(148,163,184,0.12)",
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 14,
@@ -239,16 +317,19 @@ const styles = StyleSheet.create({
   },
   statsRow: {
     flexDirection: "row",
+    justifyContent:"space-around",
     gap: 14,
     marginBottom: 26,
   },
+  statCardWrap: {
+    width:"48%"
+  },
   statCard: {
-    flex: 1,
     minHeight: 74,
-    backgroundColor: "rgba(30, 41, 59, 0.76)",
+    backgroundColor: "rgba(15,23,42,0.88)",
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(148,163,184,0.14)",
     padding: 14,
     justifyContent: "center",
   },
@@ -305,8 +386,7 @@ const styles = StyleSheet.create({
   },
   fab: {
     position: "absolute",
-    alignSelf: "center",
-    bottom: 28,
+    right: "10%",
     width: 56,
     height: 56,
     borderRadius: 28,

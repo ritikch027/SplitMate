@@ -8,8 +8,9 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { colors, fontSize, spacing } from "../constants/theme";
+import MemberAvatar from "./MemberAvatar";
 
-const ICON_COLORS = ["#7C3AED", "#5B8CFF", "#F59E0B", "#10B981", "#EC4899"];
+const ICON_COLORS = ["#7C3AED", "#5B8CFF", "#F59E0B", "#4f7b6c", "#EC4899"];
 
 const formatTimeAgo = (timestamp) => {
   if (!timestamp?.toDate) return "RECENTLY";
@@ -80,14 +81,20 @@ export default function GroupCard({ group, userBalance = 0, onPress }) {
 
           <View style={styles.avatarStack}>
             {visibleMembers.map((member, index) => {
-              const label =
+              const name =
                 typeof member === "string"
-                  ? member.charAt(0).toUpperCase()
-                  : member?.name?.charAt(0)?.toUpperCase() || "U";
+                  ? member
+                  : member?.name || member?.phone || "User";
+              const photoUrl =
+                typeof member === "string" ? "" : member?.photoUrl || "";
 
               return (
                 <View key={index} style={[styles.avatar, { left: index * 14 }]}>
-                  <Text style={styles.avatarText}>{label}</Text>
+                  <MemberAvatar
+                    name={name}
+                    photoUrl={photoUrl}
+                    size="small"
+                  />
                 </View>
               );
             })}
@@ -150,16 +157,10 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: "#182131",
     borderWidth: 1.5,
     borderColor: "#121A29",
     alignItems: "center",
     justifyContent: "center",
-  },
-  avatarText: {
-    color: "#E5E7EB",
-    fontSize: 10,
-    fontWeight: "700",
   },
   avatarMore: {
     position: "absolute",

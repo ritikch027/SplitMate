@@ -2,7 +2,6 @@ import * as ImagePicker from "expo-image-picker";
 import React, { useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -16,16 +15,21 @@ import {
 
 import { Ionicons } from "@expo/vector-icons";
 import Animated, { FadeInDown } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
 import MemberAvatar from "../components/MemberAvatar";
 import { colors, fontSize } from "../constants/theme";
+import { useAlert } from "../context/useAlert";
 import { useAuth } from "../context/useAuth";
 import { uploadProfilePhoto } from "../services/storageService";
 import { updateUser } from "../services/userService";
+import { getReadableError } from "../utils/appError";
 
 export default function CompleteProfileScreen() {
   const { user, userProfile, refreshUserProfile } = useAuth();
+  const insets = useSafeAreaInsets();
+  const { showAlert } = useAlert();
 
   const [name, setName] = useState("");
   const [photoUri, setPhotoUri] = useState("");
@@ -39,7 +43,11 @@ export default function CompleteProfileScreen() {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
     if (!permission.granted) {
-      Alert.alert("Permission needed", "Allow photo access to choose a profile picture.");
+      showAlert({
+        title: "Permission needed",
+        message: "Allow photo access to choose a profile picture.",
+        variant: "info",
+      });
       return;
     }
 
@@ -59,7 +67,11 @@ export default function CompleteProfileScreen() {
     if (!user) return;
 
     if (!name.trim()) {
-      Alert.alert("Missing name", "Please enter your name to continue.");
+      showAlert({
+        title: "Name required",
+        message: "Please enter your name to continue.",
+        variant: "error",
+      });
       return;
     }
 
@@ -80,13 +92,22 @@ export default function CompleteProfileScreen() {
       });
 
       if (!result.success) {
-        Alert.alert("Unable to save", result.error || "Please try again.");
+        showAlert({
+          title: "Unable to save",
+          message: result.error || "Please try again.",
+          variant: "error",
+        });
         return;
       }
 
       await refreshUserProfile();
+      showAlert({
+        title: "Profile saved",
+        message: "You’re all set to use SplitMate.",
+        variant: "success",
+      });
     } catch (error) {
-      Alert.alert("Unable to save", error.message || "Please try again.");
+      showAlert(getReadableError(error, "We couldn't save your profile."));
     } finally {
       setSaving(false);
     }
@@ -100,7 +121,13 @@ export default function CompleteProfileScreen() {
       <StatusBar barStyle="light-content" />
       <AnimatedBackdrop />
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: Math.max(insets.top, 20) + 44, paddingBottom: Math.max(insets.bottom, 20) + 20 },
+        ]}
+      >
         <Animated.View entering={FadeInDown.springify()} style={styles.header}>
           <Text style={styles.title}>Complete Your Profile</Text>
           <Text style={styles.subtitle}>
@@ -161,8 +188,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   content: {
-    paddingTop: 96,
-    paddingBottom: 40,
   },
   header: {
     alignItems: "center",

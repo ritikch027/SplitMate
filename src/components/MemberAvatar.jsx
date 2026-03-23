@@ -13,6 +13,7 @@ const SIZE_MAP = {
   small: 28,
   medium: 40,
   large: 64,
+  xlarge:120,
 };
 
 /*

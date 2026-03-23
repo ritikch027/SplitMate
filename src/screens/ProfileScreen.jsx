@@ -1,3 +1,4 @@
+import * as ImagePicker from "expo-image-picker";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Modal,
@@ -12,22 +13,29 @@ import {
 
 import { Ionicons } from "@expo/vector-icons";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
 import MemberAvatar from "../components/MemberAvatar";
 import { colors, fontSize, radius, spacing } from "../constants/theme";
+import { useAlert } from "../context/useAlert";
 import { useAuth } from "../context/useAuth";
 import { signOut } from "../services/authService";
 import { getUserExpensesOnce } from "../services/expenseService";
 import { getUserGroups } from "../services/groupService";
+import { uploadProfilePhoto } from "../services/storageService";
 import { getUser, updateUser } from "../services/userService";
+import { getReadableError } from "../utils/appError";
 
 /*──────────────────────────────────────────────────────────────
   StatCard
 ──────────────────────────────────────────────────────────────*/
 function StatCard({ label, value, highlight = false, delay }) {
   return (
-    <Animated.View entering={FadeInDown.delay(delay).springify()}>
+    <Animated.View
+      entering={FadeInDown.delay(delay).springify()}
+      style={styles.statCardWrap}
+    >
       <Animated.View style={styles.statCard}>
         <Text style={styles.statLabel}>{label}</Text>
         <Text
@@ -53,7 +61,6 @@ function SettingRow({
   onPress,
 }) {
   return (
-    
     <Animated.View entering={FadeInDown.delay(delay).springify()}>
       <TouchableOpacity
         activeOpacity={0.88}
@@ -80,12 +87,16 @@ function SettingRow({
 ──────────────────────────────────────────────────────────────*/
 export default function ProfileScreen() {
   const { user, userProfile, refreshUserProfile } = useAuth();
+  const insets = useSafeAreaInsets();
+  const { showAlert } = useAlert();
 
   const [profile, setProfile] = useState(null);
   const [groupsCount, setGroupsCount] = useState(0);
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [editVisible, setEditVisible] = useState(false);
+  const [signOutVisible, setSignOutVisible] = useState(false);
   const [name, setName] = useState("");
+  const [photoUri, setPhotoUri] = useState("");
   const [saving, setSaving] = useState(false);
   const [profileLoading, setProfileLoading] = useState(true);
 
@@ -104,6 +115,7 @@ export default function ProfileScreen() {
     if (userProfile) {
       setProfile(userProfile);
       setName(userProfile.name || "");
+      setPhotoUri("");
       setProfileLoading(false);
     }
   }, [user, userProfile]);
@@ -125,6 +137,7 @@ export default function ProfileScreen() {
       if (response.success) {
         setProfile(response.user);
         setName(response.user.name || "");
+        setPhotoUri("");
       } else {
         setProfile(
           (current) =>
@@ -186,35 +199,100 @@ export default function ProfileScreen() {
   /*──────────────────────────────────────────────────────────────
     Derived values
   ──────────────────────────────────────────────────────────────*/
-  const amountSettled = useMemo(
-    () => Math.floor(totalExpenses * 0.4),
-    [totalExpenses],
-  );
-
   const profileName = profile?.name?.trim() || "Unnamed user";
   const profilePhone = profile?.phone || user?.phoneNumber || "";
+  const modalPreviewName = useMemo(
+    () => name.trim() || profileName,
+    [name, profileName],
+  );
+  const modalPreviewPhoto = photoUri || profile?.photoUrl || "";
   const formatCurrency = (amount) =>
     `Rs ${Number(amount || 0).toLocaleString("en-IN")}`;
 
   /*──────────────────────────────────────────────────────────────
     Handlers
   ──────────────────────────────────────────────────────────────*/
+  const openEditModal = () => {
+    setName(profile?.name || "");
+    setPhotoUri("");
+    setEditVisible(true);
+  };
+
+  const closeEditModal = () => {
+    setName(profile?.name || "");
+    setPhotoUri("");
+    setEditVisible(false);
+  };
+
+  const handlePickImage = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      showAlert({
+        title: "Permission needed",
+        message: "Allow photo access to update your profile picture.",
+        variant: "info",
+      });
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      setPhotoUri(result.assets[0].uri);
+    }
+  };
+
   const handleSave = async () => {
     if (!name.trim() || !user) return;
     setSaving(true);
 
-    const result = await updateUser(user.uid, { name: name.trim() });
+    try {
+      let photoUrl = profile?.photoUrl || "";
 
-    if (result.success) {
-      setProfile((current) => ({ ...current, name: name.trim() }));
-      await refreshUserProfile();
-      setEditVisible(false);
+      if (photoUri) {
+        photoUrl = await uploadProfilePhoto(user.uid, photoUri);
+      }
+
+      const result = await updateUser(user.uid, {
+        name: name.trim(),
+        photoUrl,
+      });
+
+      if (result.success) {
+        setProfile((current) => ({
+          ...current,
+          name: name.trim(),
+          photoUrl,
+        }));
+        await refreshUserProfile();
+        closeEditModal();
+        showAlert({
+          title: "Profile updated",
+          message: "Your personal information has been refreshed.",
+          variant: "success",
+        });
+      } else {
+        showAlert({
+          title: "Unable to save",
+          message: result.error || "Please try again.",
+          variant: "error",
+        });
+      }
+    } catch (error) {
+      showAlert(getReadableError(error, "We couldn't update your profile."));
+    } finally {
+      setSaving(false);
     }
-
-    setSaving(false);
   };
 
   const handleSignOut = async () => {
+    setSignOutVisible(false);
     await signOut();
   };
 
@@ -241,7 +319,10 @@ export default function ProfileScreen() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: Math.max(insets.top, 20) + 28 },
+        ]}
       >
         {/* ── Header / Avatar ── */}
         <Animated.View entering={FadeInDown.springify()} style={styles.header}>
@@ -251,9 +332,8 @@ export default function ProfileScreen() {
               <MemberAvatar
                 name={profileName}
                 photoUrl={profile?.photoUrl}
-                size="large"
-                showRing={false}
-                showOnline
+                size="xlarge"
+                showRing={true}
               />
             </View>
           </View>
@@ -265,8 +345,8 @@ export default function ProfileScreen() {
         <View style={styles.statsRow}>
           <StatCard label="Groups" value={groupsCount} delay={100} />
           <StatCard
-            label="Settled"
-            value={formatCurrency(amountSettled)}
+            label="Tracked"
+            value={formatCurrency(totalExpenses)}
             highlight
             delay={180}
           />
@@ -288,7 +368,7 @@ export default function ProfileScreen() {
             iconColor={colors.accent}
             iconBg="rgba(124,58,237,0.16)"
             delay={260}
-            onPress={() => setEditVisible(true)}
+            onPress={openEditModal}
           />
           <SettingRow
             icon="card-outline"
@@ -322,7 +402,7 @@ export default function ProfileScreen() {
           <TouchableOpacity
             activeOpacity={0.88}
             style={styles.signOutBtn}
-            onPress={handleSignOut}
+            onPress={() => setSignOutVisible(true)}
           >
             <Ionicons name="log-out-outline" size={18} color="#F87171" />
             <Text style={styles.signOutText}>Sign Out</Text>
@@ -338,11 +418,39 @@ export default function ProfileScreen() {
             style={styles.modalSheet}
           >
             <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>Edit Name</Text>
+            <Text style={styles.modalTitle}>Personal Information</Text>
             <Text style={styles.modalSubtitle}>
               Update how your profile appears across SplitMate.
             </Text>
 
+            <View style={styles.modalAvatarSection}>
+              <View style={styles.modalAvatarOuter}>
+                <MemberAvatar
+                  name={modalPreviewName}
+                  photoUrl={modalPreviewPhoto}
+                  size="large"
+                  showRing={false}
+                  showOnline={false}
+                />
+              </View>
+
+              <TouchableOpacity
+                activeOpacity={0.88}
+                style={styles.photoButton}
+                onPress={handlePickImage}
+              >
+                <Ionicons
+                  name="image-outline"
+                  size={16}
+                  color={colors.accent}
+                />
+                <Text style={styles.photoButtonText}>
+                  {modalPreviewPhoto ? "Change Photo" : "Add Photo"}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.fieldLabel}>Name</Text>
             <TextInput
               autoFocus
               value={name}
@@ -352,11 +460,18 @@ export default function ProfileScreen() {
               style={styles.modalInput}
             />
 
+            <Text style={styles.fieldLabel}>Phone Number</Text>
+            <View style={styles.phonePill}>
+              <Text style={styles.phoneText}>
+                {profilePhone || "No number available"}
+              </Text>
+            </View>
+
             <View style={styles.modalActions}>
               <TouchableOpacity
                 activeOpacity={0.85}
                 style={styles.cancelBtn}
-                onPress={() => setEditVisible(false)}
+                onPress={closeEditModal}
               >
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
@@ -374,6 +489,41 @@ export default function ProfileScreen() {
           </Animated.View>
         </View>
       </Modal>
+
+      <Modal visible={signOutVisible} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <Animated.View
+            entering={FadeInUp.springify()}
+            style={styles.confirmSheet}
+          >
+            <View style={styles.confirmIconWrap}>
+              <Ionicons name="log-out-outline" size={22} color="#F87171" />
+            </View>
+            <Text style={styles.confirmTitle}>Sign out of SplitMate?</Text>
+            <Text style={styles.confirmSubtitle}>
+              You&apos;ll need to verify your phone again to get back in.
+            </Text>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={styles.cancelBtn}
+                onPress={() => setSignOutVisible(false)}
+              >
+                <Text style={styles.cancelText}>Stay</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={styles.dangerBtn}
+                onPress={handleSignOut}
+              >
+                <Text style={styles.dangerText}>Sign Out</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -383,7 +533,7 @@ export default function ProfileScreen() {
 ──────────────────────────────────────────────────────────────*/
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#050816" },
-  content: { paddingHorizontal: 20, paddingTop: 56, paddingBottom: 120 },
+  content: { paddingHorizontal: 20, paddingBottom: 120 },
   loadingWrap: {
     flex: 1,
     justifyContent: "center",
@@ -408,21 +558,23 @@ const styles = StyleSheet.create({
   header: { alignItems: "center", marginBottom: 28 },
   avatarGlow: {
     position: "absolute",
-    top: -8,
-    width: 112,
-    height: 112,
-    borderRadius: 56,
+    top: 9,
+    width: 136,
+    height: 136,
+    borderRadius: 68,
     backgroundColor: "rgba(255,244,214,0.18)",
     shadowColor: "#FDE68A",
     shadowOpacity: 0.75,
     shadowRadius: 26,
     shadowOffset: { width: 0, height: 0 },
   },
-  avatarWrap: { marginBottom: 16 },
+  avatarWrap: { marginBottom: 18, paddingTop: 6 },
   avatarOuter: {
-    padding: 4,
+    padding: 8,
     borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.04)",
+    backgroundColor: "rgba(15,23,42,0.86)",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.16)",
   },
   name: {
     color: "#F8FAFC",
@@ -433,8 +585,8 @@ const styles = StyleSheet.create({
   },
   handle: { marginTop: 6, color: "#7C8BA5", fontSize: 16, fontWeight: "500" },
   statsRow: { flexDirection: "row", gap: 14, marginBottom: 34 },
+  statCardWrap: { flex: 1 },
   statCard: {
-    flex: 1,
     minHeight: 74,
     backgroundColor: "rgba(21, 29, 48, 0.96)",
     borderRadius: 10,
@@ -535,6 +687,40 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     marginBottom: spacing.lg,
   },
+  modalAvatarSection: {
+    alignItems: "center",
+    marginBottom: spacing.lg,
+  },
+  modalAvatarOuter: {
+    padding: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(15,23,42,0.86)",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.16)",
+    marginBottom: 14,
+  },
+  photoButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(124,58,237,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(124,58,237,0.24)",
+  },
+  photoButtonText: {
+    color: colors.accent,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  fieldLabel: {
+    color: "#D9E1EE",
+    fontSize: 14,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
   modalInput: {
     backgroundColor: "rgba(15,23,42,0.9)",
     borderWidth: 1,
@@ -544,6 +730,21 @@ const styles = StyleSheet.create({
     color: "#F8FAFC",
     fontSize: fontSize.md,
     marginBottom: spacing.lg,
+  },
+  phonePill: {
+    minHeight: 50,
+    borderRadius: radius.md,
+    backgroundColor: "rgba(15,23,42,0.7)",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.2)",
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.lg,
+  },
+  phoneText: {
+    color: "#CBD5E1",
+    fontSize: fontSize.md,
+    fontWeight: "500",
   },
   modalActions: { flexDirection: "row", gap: spacing.sm },
   cancelBtn: {
@@ -564,4 +765,50 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   saveText: { color: "#FFFFFF", fontWeight: "700", fontSize: fontSize.md },
+  confirmSheet: {
+    backgroundColor: "#0F172A",
+    borderRadius: 24,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.16)",
+    marginHorizontal: 20,
+  },
+  confirmIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(239,68,68,0.12)",
+    alignSelf: "center",
+    marginBottom: 16,
+  },
+  confirmTitle: {
+    color: "#F8FAFC",
+    fontSize: fontSize.lg,
+    fontWeight: "800",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  confirmSubtitle: {
+    color: "#94A3B8",
+    fontSize: fontSize.sm,
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: spacing.lg,
+  },
+  dangerBtn: {
+    flex: 1,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    alignItems: "center",
+    backgroundColor: "rgba(239,68,68,0.16)",
+    borderWidth: 1,
+    borderColor: "rgba(239,68,68,0.28)",
+  },
+  dangerText: {
+    color: "#F87171",
+    fontWeight: "700",
+    fontSize: fontSize.md,
+  },
 });

@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 
+import { Ionicons } from "@expo/vector-icons";
 import Animated, {
   FadeInDown,
   useAnimatedStyle,
@@ -17,15 +18,16 @@ import Animated, {
   withSequence,
   withTiming,
 } from "react-native-reanimated";
-import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
 import { firebaseConfig } from "../config/firebaseConfig";
 import { colors, fontSize, spacing } from "../constants/theme";
 import { sendOTP, verifyOTP } from "../services/authService";
 
-export default function OTPScreen({ route }) {
+export default function OTPScreen({ navigation, route }) {
   const { phone } = route.params;
+  const insets = useSafeAreaInsets();
 
   const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
@@ -39,8 +41,11 @@ export default function OTPScreen({ route }) {
 
   const maskedPhone = `${phone.slice(0, 3)} ••• ••• ${phone.slice(phone.length - 4)}`;
 
+  /*──────────────────────────────────────────────────────────────
+    Countdown timer
+  ──────────────────────────────────────────────────────────────*/
   useEffect(() => {
-    if (timer === 0) return undefined;
+    if (timer === 0) return;
 
     const interval = setInterval(() => {
       setTimer((current) => current - 1);
@@ -49,7 +54,10 @@ export default function OTPScreen({ route }) {
     return () => clearInterval(interval);
   }, [timer]);
 
-  const animatedStyle = useAnimatedStyle(() => ({
+  /*──────────────────────────────────────────────────────────────
+    Shake animation — only transform, no entering
+  ──────────────────────────────────────────────────────────────*/
+  const shakeStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: shake.value }],
   }));
 
@@ -63,6 +71,9 @@ export default function OTPScreen({ route }) {
     );
   };
 
+  /*──────────────────────────────────────────────────────────────
+    OTP input handler
+  ──────────────────────────────────────────────────────────────*/
   const handleChange = (value, index) => {
     const digit = value.replace(/\D/g, "");
     const nextOtp = [...otp];
@@ -82,6 +93,9 @@ export default function OTPScreen({ route }) {
     }
   };
 
+  /*──────────────────────────────────────────────────────────────
+    Verify OTP
+  ──────────────────────────────────────────────────────────────*/
   const verify = async (code) => {
     if (code.length !== 6) return;
 
@@ -99,6 +113,7 @@ export default function OTPScreen({ route }) {
       }
 
       setStatusText("Verified. Taking you inside...");
+      navigation.replace("CompleteProfileScreen");
     } catch {
       setError("Invalid OTP");
       triggerShake();
@@ -107,6 +122,9 @@ export default function OTPScreen({ route }) {
     }
   };
 
+  /*──────────────────────────────────────────────────────────────
+    Resend OTP
+  ──────────────────────────────────────────────────────────────*/
   const resendOTP = async () => {
     if (timer > 0) return;
 
@@ -121,8 +139,19 @@ export default function OTPScreen({ route }) {
     setTimer(59);
   };
 
+  /*──────────────────────────────────────────────────────────────
+    Render
+  ──────────────────────────────────────────────────────────────*/
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        {
+          paddingTop: insets.top + 16,
+          paddingBottom: Math.max(insets.bottom, 16),
+        },
+      ]}
+    >
       <StatusBar barStyle="light-content" />
       <AnimatedBackdrop />
 
@@ -131,9 +160,14 @@ export default function OTPScreen({ route }) {
         firebaseConfig={firebaseConfig}
       />
 
+      {/* ── Header ── */}
       <Animated.View entering={FadeInDown.springify()} style={styles.header}>
         <View style={styles.iconWrap}>
-          <Ionicons name="lock-closed-outline" size={30} color={colors.accent} />
+          <Ionicons
+            name="lock-closed-outline"
+            size={30}
+            color={colors.accent}
+          />
         </View>
         <Text style={styles.title}>Verify Identity</Text>
         <Text style={styles.subtitle}>
@@ -142,31 +176,48 @@ export default function OTPScreen({ route }) {
         </Text>
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.delay(100).springify()} style={animatedStyle}>
-        <View style={styles.otpContainer}>
-          {otp.map((digit, index) => (
-            <TextInput
-              key={index}
-              ref={(ref) => {
-                inputs.current[index] = ref;
-              }}
-              style={[styles.otpBox, digit ? styles.otpFilled : null]}
-              keyboardType="number-pad"
-              maxLength={1}
-              value={digit}
-              onChangeText={(value) => handleChange(value, index)}
-              placeholder="•"
-              placeholderTextColor="#6B7280"
-            />
-          ))}
-        </View>
+      {/* ── OTP inputs ──
+          FIX: entering on outer wrapper, transform (shake) on inner wrapper
+          Never put both on the same Animated.View
+      ──────────────────────────────────────────────────────────── */}
+      <Animated.View entering={FadeInDown.delay(100).springify()}>
+        {/* ← entering lives here  */}
+        <Animated.View style={shakeStyle}>
+          {/* ← transform lives here */}
+          <View style={styles.otpContainer}>
+            {otp.map((digit, index) => (
+              <TextInput
+                key={index}
+                ref={(ref) => {
+                  inputs.current[index] = ref;
+                }}
+                style={[styles.otpBox, digit ? styles.otpFilled : null]}
+                keyboardType="number-pad"
+                maxLength={1}
+                value={digit}
+                onChangeText={(value) => handleChange(value, index)}
+                placeholder="•"
+                placeholderTextColor="#6B7280"
+              />
+            ))}
+          </View>
+        </Animated.View>
       </Animated.View>
 
+      {/* ── Error / status ── */}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {statusText ? <Text style={styles.statusText}>{statusText}</Text> : null}
 
-      <Animated.View entering={FadeInDown.delay(160).springify()} style={styles.buttonWrap}>
-        <TouchableOpacity disabled={loading} activeOpacity={0.9} onPress={() => verify(otp.join(""))}>
+      {/* ── Verify button ── */}
+      <Animated.View
+        entering={FadeInDown.delay(160).springify()}
+        style={styles.buttonWrap}
+      >
+        <TouchableOpacity
+          disabled={loading}
+          activeOpacity={0.9}
+          onPress={() => verify(otp.join(""))}
+        >
           <View style={styles.button}>
             {loading ? (
               <ActivityIndicator color="#fff" />
@@ -177,9 +228,13 @@ export default function OTPScreen({ route }) {
         </TouchableOpacity>
       </Animated.View>
 
+      {/* ── Footer / resend ── */}
       <Animated.View entering={FadeInDown.delay(220)} style={styles.footer}>
         <Text style={styles.timerText}>
-          Resend code in <Text style={styles.timerValue}>00:{String(timer).padStart(2, "0")}</Text>
+          Resend code in{" "}
+          <Text style={styles.timerValue}>
+            00:{String(timer).padStart(2, "0")}
+          </Text>
         </Text>
 
         <TouchableOpacity disabled={timer > 0} onPress={resendOTP}>
@@ -192,10 +247,13 @@ export default function OTPScreen({ route }) {
   );
 }
 
+/*──────────────────────────────────────────────────────────────
+  Styles
+──────────────────────────────────────────────────────────────*/
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#111111",
+    backgroundColor: "#020617",
     paddingHorizontal: 20,
     justifyContent: "center",
   },
@@ -204,23 +262,23 @@ const styles = StyleSheet.create({
     marginBottom: 34,
   },
   iconWrap: {
-    width: 54,
-    height: 54,
-    borderRadius: 16,
+    width: 58,
+    height: 58,
+    borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(124,58,237,0.16)",
+    backgroundColor: "rgba(15,23,42,0.82)",
     borderWidth: 1,
-    borderColor: "rgba(124,58,237,0.22)",
+    borderColor: "rgba(148,163,184,0.16)",
     marginBottom: 26,
   },
   title: {
-    color: "#F3F4F6",
+    color: "#F8FAFC",
     fontSize: 24,
     fontWeight: "800",
   },
   subtitle: {
-    color: "#8B93A7",
+    color: "#94A3B8",
     fontSize: fontSize.md,
     textAlign: "center",
     marginTop: 12,
@@ -228,7 +286,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   subtitleStrong: {
-    color: "#F3F4F6",
+    color: "#E2E8F0",
     fontWeight: "700",
   },
   otpContainer: {
@@ -240,16 +298,17 @@ const styles = StyleSheet.create({
     width: 42,
     height: 50,
     borderRadius: 10,
-    backgroundColor: "#1F1F1F",
+    backgroundColor: "rgba(15,23,42,0.88)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: "rgba(148,163,184,0.16)",
     textAlign: "center",
     color: "#F8FAFC",
     fontSize: 24,
     fontWeight: "700",
   },
   otpFilled: {
-    borderColor: "rgba(124,58,237,0.6)",
+    backgroundColor: "rgba(30,41,59,0.88)",
+    borderColor: "rgba(124,58,237,0.55)",
   },
   error: {
     color: "#F87171",
@@ -283,7 +342,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   timerText: {
-    color: "#8B93A7",
+    color: "#94A3B8",
     fontSize: fontSize.sm,
   },
   timerValue: {
@@ -292,11 +351,11 @@ const styles = StyleSheet.create({
   },
   resend: {
     marginTop: spacing.lg,
-    color: "#B7C0D2",
+    color: "#CBD5E1",
     fontSize: fontSize.sm,
     fontWeight: "600",
   },
   resendDisabled: {
-    color: "#5D6677",
+    color: "#64748B",
   },
 });

@@ -1,4 +1,5 @@
 import {
+  arrayRemove,
   arrayUnion,
   collection,
   doc,
@@ -50,8 +51,11 @@ const sanitizeGroupName = (name) => {
 |   lastActivity
 | }
 |
-| Also updates each member's user document by adding
-| the groupId to their groups array.
+| Note:
+| We intentionally keep the group document as the source of truth
+| for membership. Updating other users' documents from the client
+| would require cross-user write permissions and is blocked by
+| safer Firestore rules.
 */
 export const createGroup = async (name, emoji, memberIds, createdBy) => {
   try {
@@ -80,32 +84,7 @@ export const createGroup = async (name, emoji, memberIds, createdBy) => {
       lastActivity: serverTimestamp(),
     };
 
-    // Create group document
     await setDoc(groupRef, groupData);
-
-    // Add groupId to each member's user document
-    for (const memberId of uniqueMemberIds) {
-      const userRef = doc(db, "users", memberId);
-      const userSnapshot = await getDoc(userRef);
-
-      if (userSnapshot.exists()) {
-        await updateDoc(userRef, {
-          groups: arrayUnion(groupId),
-        });
-      } else {
-        await setDoc(
-          userRef,
-          {
-            id: memberId,
-            name: "",
-            phone: "",
-            groups: [groupId],
-            createdAt: serverTimestamp(),
-          },
-          { merge: true },
-        );
-      }
-    }
 
     return {
       success: true,
@@ -209,33 +188,11 @@ export const addMemberToGroup = async (groupId, userId) => {
     }
 
     const groupRef = doc(db, "groups", groupId);
-    const userRef = doc(db, "users", userId);
 
-    // Add member to group
     await updateDoc(groupRef, {
       members: arrayUnion(userId),
+      lastActivity: serverTimestamp(),
     });
-
-    // Add group reference to user
-    const userSnapshot = await getDoc(userRef);
-
-    if (userSnapshot.exists()) {
-      await updateDoc(userRef, {
-        groups: arrayUnion(groupId),
-      });
-    } else {
-      await setDoc(
-        userRef,
-        {
-          id: userId,
-          name: "",
-          phone: "",
-          groups: [groupId],
-          createdAt: serverTimestamp(),
-        },
-        { merge: true },
-      );
-    }
 
     return { success: true };
   } catch (error) {
@@ -275,6 +232,30 @@ export const updateGroupActivity = async (groupId) => {
     return {
       success: false,
       error: error.message || "Failed to update group activity",
+    };
+  }
+};
+
+export const removeMemberFromGroup = async (groupId, userId) => {
+  try {
+    if (!groupId || !userId) {
+      throw new Error("Group ID and user ID are required.");
+    }
+
+    const groupRef = doc(db, "groups", groupId);
+
+    await updateDoc(groupRef, {
+      members: arrayRemove(userId),
+      lastActivity: serverTimestamp(),
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Remove member error:", error);
+
+    return {
+      success: false,
+      error: error.message || "Failed to remove member from group",
     };
   }
 };

@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from "react";
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -14,29 +13,34 @@ import {
 
 import { Ionicons } from "@expo/vector-icons";
 import Animated, { FadeInDown } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
 import { colors } from "../constants/theme";
+import { useAlert } from "../context/useAlert";
 import { useAuth } from "../context/useAuth";
-import { addExpense } from "../services/expenseService";
+import { addExpense, updateExpense } from "../services/expenseService";
+import { getReadableError } from "../utils/appError";
 
 const categories = [
-  { name: "Food", icon: "book-outline" },
-  { name: "Transport", icon: "flash-outline" },
+  { name: "Food", icon: "fast-food" },
+  { name: "Transport", icon: "airplane-outline" },
   { name: "Entertainment", icon: "videocam-outline" },
   { name: "Shopping", icon: "cart-outline" },
 ];
 
 export default function AddExpenseScreen({ navigation, route }) {
-  const { groupId, groupName, members = [] } = route.params;
+  const { groupId, groupName, members = [], expense = null } = route.params;
   const { user, userProfile } = useAuth();
+  const insets = useSafeAreaInsets();
+  const { showAlert } = useAlert();
 
-  const [amount, setAmount] = useState("");
-  const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("Food");
-  const [paidBy, setPaidBy] = useState(user?.uid || "");
-  const [splitType, setSplitType] = useState("equal");
-  const [customSplits, setCustomSplits] = useState({});
+  const [amount, setAmount] = useState(expense?.amount ? String(expense.amount) : "");
+  const [description, setDescription] = useState(expense?.description || "");
+  const [category, setCategory] = useState(expense?.category || "Food");
+  const [paidBy, setPaidBy] = useState(expense?.paidBy || user?.uid || "");
+  const [splitType, setSplitType] = useState(expense?.splits ? "custom" : "equal");
+  const [customSplits, setCustomSplits] = useState(expense?.splits || {});
   const [loading, setLoading] = useState(false);
 
   const equalSplitPreview = useMemo(() => {
@@ -67,7 +71,10 @@ export default function AddExpenseScreen({ navigation, route }) {
       return acc;
     }, {});
 
-    const totalCustom = Object.values(parsedSplits).reduce((sum, value) => sum + value, 0);
+    const totalCustom = Object.values(parsedSplits).reduce(
+      (sum, value) => sum + value,
+      0,
+    );
 
     if (Number(totalCustom.toFixed(2)) !== Number(totalAmount.toFixed(2))) {
       throw new Error("Custom splits must add up to the total amount.");
@@ -80,17 +87,29 @@ export default function AddExpenseScreen({ navigation, route }) {
     const totalAmount = Number(amount);
 
     if (!totalAmount || totalAmount <= 0) {
-      Alert.alert("Invalid amount", "Please enter a valid expense amount.");
+      showAlert({
+        title: "Invalid amount",
+        message: "Please enter a valid expense amount.",
+        variant: "error",
+      });
       return;
     }
 
     if (!description.trim()) {
-      Alert.alert("Missing description", "Please enter what this expense was for.");
+      showAlert({
+        title: "Missing description",
+        message: "Please enter what this expense was for.",
+        variant: "error",
+      });
       return;
     }
 
     if (!members.length) {
-      Alert.alert("Missing members", "This group has no members to split with.");
+      showAlert({
+        title: "Missing members",
+        message: "This group has no members to split with.",
+        variant: "error",
+      });
       return;
     }
 
@@ -103,7 +122,8 @@ export default function AddExpenseScreen({ navigation, route }) {
         amount: totalAmount,
         category,
         paidBy,
-        paidByName: members.find((member) => member.id === paidBy)?.name || "Unknown",
+        paidByName:
+          members.find((member) => member.id === paidBy)?.name || "Unknown",
         splitBetween: Object.keys(splitData),
         splits: splitData,
         createdBy: user.uid,
@@ -111,18 +131,27 @@ export default function AddExpenseScreen({ navigation, route }) {
         groupName: groupName || "Group",
       };
 
-      const result = await addExpense(groupId, expenseData);
+      const result = expense
+        ? await updateExpense(expense.id, groupId, expenseData, user.uid)
+        : await addExpense(groupId, expenseData);
 
       if (!result.success) {
-        Alert.alert("Unable to add expense", result.error || "Please try again.");
+        showAlert({
+          title: expense ? "Unable to update expense" : "Unable to add expense",
+          message: result.error || "Please try again.",
+          variant: "error",
+        });
         return;
       }
 
-      Alert.alert("Expense added", "The group has been updated.", [
-        { text: "OK", onPress: () => navigation.goBack() },
-      ]);
+      showAlert({
+        title: expense ? "Expense updated" : "Expense added",
+        message: expense ? "Your changes have been saved." : "The group has been updated.",
+        variant: "success",
+      });
+      navigation.goBack();
     } catch (error) {
-      Alert.alert("Unable to add expense", error.message || "Please try again.");
+      showAlert(getReadableError(error, "We couldn't add the expense."));
     } finally {
       setLoading(false);
     }
@@ -136,19 +165,31 @@ export default function AddExpenseScreen({ navigation, route }) {
       <StatusBar barStyle="light-content" />
       <AnimatedBackdrop />
 
-      <Animated.View entering={FadeInDown.springify()} style={styles.sheet}>
+      <Animated.View
+        entering={FadeInDown.springify()}
+        style={[styles.sheet, { paddingTop: Math.max(insets.top, 10) }]}
+      >
         <View style={styles.handle} />
 
         <View style={styles.header}>
-          <TouchableOpacity activeOpacity={0.85} onPress={() => navigation.goBack()}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => navigation.goBack()}
+          >
             <Text style={styles.cancel}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Add Expense</Text>
+          <Text style={styles.title}>{expense ? "Edit Expense" : "Add Expense"}</Text>
           <View style={styles.headerSpacer} />
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-          <Animated.View entering={FadeInDown.delay(80).springify()} style={styles.amountBlock}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.content}
+        >
+          <Animated.View
+            entering={FadeInDown.delay(80).springify()}
+            style={styles.amountBlock}
+          >
             <Text style={styles.amountLabel}>How much?</Text>
             <View style={styles.amountRow}>
               <Text style={styles.currency}>Rs</Text>
@@ -184,14 +225,24 @@ export default function AddExpenseScreen({ navigation, route }) {
                     style={styles.categoryItem}
                     onPress={() => setCategory(item.name)}
                   >
-                    <View style={[styles.categoryIconWrap, selected && styles.categoryIconWrapActive]}>
+                    <View
+                      style={[
+                        styles.categoryIconWrap,
+                        selected && styles.categoryIconWrapActive,
+                      ]}
+                    >
                       <Ionicons
                         name={item.icon}
                         size={20}
                         color={selected ? "#fff" : "#94A3B8"}
                       />
                     </View>
-                    <Text style={[styles.categoryText, selected && styles.categoryTextActive]}>
+                    <Text
+                      style={[
+                        styles.categoryText,
+                        selected && styles.categoryTextActive,
+                      ]}
+                    >
                       {item.name === "Entertainment" ? "Fun" : item.name}
                     </Text>
                   </TouchableOpacity>
@@ -208,18 +259,34 @@ export default function AddExpenseScreen({ navigation, route }) {
 
             <View style={styles.toggleWrap}>
               <TouchableOpacity
-                style={[styles.toggle, splitType === "equal" && styles.toggleActive]}
+                style={[
+                  styles.toggle,
+                  splitType === "equal" && styles.toggleActive,
+                ]}
                 onPress={() => setSplitType("equal")}
               >
-                <Text style={[styles.toggleText, splitType === "equal" && styles.toggleTextActive]}>
+                <Text
+                  style={[
+                    styles.toggleText,
+                    splitType === "equal" && styles.toggleTextActive,
+                  ]}
+                >
                   Equally
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.toggle, splitType === "custom" && styles.toggleActive]}
+                style={[
+                  styles.toggle,
+                  splitType === "custom" && styles.toggleActive,
+                ]}
                 onPress={() => setSplitType("custom")}
               >
-                <Text style={[styles.toggleText, splitType === "custom" && styles.toggleTextActive]}>
+                <Text
+                  style={[
+                    styles.toggleText,
+                    splitType === "custom" && styles.toggleTextActive,
+                  ]}
+                >
                   Custom
                 </Text>
               </TouchableOpacity>
@@ -227,15 +294,20 @@ export default function AddExpenseScreen({ navigation, route }) {
 
             {splitType === "equal" ? (
               <Text style={styles.helperText}>
-                Each member pays Rs {equalSplitPreview ? equalSplitPreview.toFixed(2) : "0.00"}
+                Each member pays Rs{" "}
+                {equalSplitPreview ? equalSplitPreview.toFixed(2) : "0.00"}
               </Text>
             ) : (
               members.map((member) => (
                 <View key={member.id} style={styles.customRow}>
-                  <Text style={styles.memberName}>{member.name || member.phone}</Text>
+                  <Text style={styles.memberName}>
+                    {member.name || member.phone}
+                  </Text>
                   <TextInput
                     value={customSplits[member.id] || ""}
-                    onChangeText={(value) => updateCustomSplit(member.id, value)}
+                    onChangeText={(value) =>
+                      updateCustomSplit(member.id, value)
+                    }
                     keyboardType="numeric"
                     placeholder="0"
                     placeholderTextColor="#6B7280"
@@ -256,11 +328,21 @@ export default function AddExpenseScreen({ navigation, route }) {
                   <TouchableOpacity
                     key={member.id}
                     activeOpacity={0.85}
-                    style={[styles.memberChip, selected && styles.memberChipActive]}
+                    style={[
+                      styles.memberChip,
+                      selected && styles.memberChipActive,
+                    ]}
                     onPress={() => setPaidBy(member.id)}
                   >
-                    <Text style={[styles.memberChipText, selected && styles.memberChipTextActive]}>
-                      {member.id === user?.uid ? "You" : member.name || member.phone}
+                    <Text
+                      style={[
+                        styles.memberChipText,
+                        selected && styles.memberChipTextActive,
+                      ]}
+                    >
+                      {member.id === user?.uid
+                        ? "You"
+                        : member.name || member.phone}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -274,7 +356,9 @@ export default function AddExpenseScreen({ navigation, route }) {
             onPress={handleAddExpense}
             disabled={loading}
           >
-            <Text style={styles.submitText}>{loading ? "Creating..." : "Create Expense"}</Text>
+            <Text style={styles.submitText}>
+              {loading ? (expense ? "Saving..." : "Creating...") : expense ? "Save Changes" : "Create Expense"}
+            </Text>
           </TouchableOpacity>
         </ScrollView>
       </Animated.View>
@@ -293,7 +377,6 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     backgroundColor: "#111827",
-    paddingTop: 10,
   },
   handle: {
     alignSelf: "center",

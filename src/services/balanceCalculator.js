@@ -56,17 +56,33 @@
 export const calculateBalances = (expenses, members, currentUserId) => {
   const balances = {};
 
+  const getMemberId = (member) => {
+    if (typeof member === "string") return member;
+    return member?.id;
+  };
+
+  const getMemberName = (member) => {
+    if (typeof member === "string") return member;
+    return member?.name || member?.phone || "Unknown";
+  };
+
   // Initialize balances
   members.forEach((member) => {
-    if (member.id !== currentUserId) {
-      balances[member.id] = 0;
+    const memberId = getMemberId(member);
+
+    if (memberId && memberId !== currentUserId) {
+      balances[memberId] = 0;
     }
   });
 
   expenses.forEach((expense) => {
-    const share = expense.amount / expense.splitBetween.length;
+    if (!Array.isArray(expense?.splitBetween) || expense.splitBetween.length === 0) {
+      return;
+    }
 
     expense.splitBetween.forEach((userId) => {
+      const share = getExpenseShareForUser(expense, userId);
+
       // If current user paid
       if (expense.paidBy === currentUserId && userId !== currentUserId) {
         balances[userId] += share;
@@ -81,14 +97,32 @@ export const calculateBalances = (expenses, members, currentUserId) => {
 
   // Convert object → array format
   return Object.keys(balances).map((userId) => {
-    const member = members.find((m) => m.id === userId);
+    const member = members.find((m) => getMemberId(m) === userId);
 
     return {
       userId,
-      name: member?.name || "Unknown",
+      name: getMemberName(member),
       netBalance: Number(balances[userId].toFixed(2)),
     };
   });
+};
+
+export const getExpenseShareForUser = (expense, userId) => {
+  const customShare = Number(expense?.splits?.[userId]);
+
+  if (Number.isFinite(customShare) && customShare >= 0) {
+    return customShare;
+  }
+
+  const participantCount = Array.isArray(expense?.splitBetween)
+    ? expense.splitBetween.length
+    : 0;
+
+  if (!participantCount) {
+    return 0;
+  }
+
+  return Number(expense.amount || 0) / participantCount;
 };
 
 /*

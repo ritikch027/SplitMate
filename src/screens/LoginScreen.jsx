@@ -15,6 +15,7 @@ import {
 
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
 import { firebaseConfig } from "../config/firebaseConfig";
@@ -22,6 +23,7 @@ import { colors, fontSize, spacing } from "../constants/theme";
 import { sendOTP } from "../services/authService";
 
 export default function LoginScreen({ navigation }) {
+  const insets = useSafeAreaInsets();
   const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -58,7 +60,13 @@ export default function LoginScreen({ navigation }) {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[
+        styles.container,
+        {
+          paddingTop: insets.top + 16,
+          paddingBottom: Math.max(insets.bottom, 16),
+        },
+      ]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <StatusBar barStyle="light-content" />

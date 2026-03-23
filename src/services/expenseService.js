@@ -2,12 +2,14 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   setDoc,
+  updateDoc,
   where,
 } from "firebase/firestore";
 
@@ -267,6 +269,79 @@ export const getGroupExpensesOnce = async (groupId) => {
 export const deleteExpense = async (expenseId) => {
   try {
     await deleteDoc(doc(db, "expenses", expenseId));
+    return { success: true };
+  } catch (error) {
+    console.error("Delete expense error:", error);
+    return {
+      success: false,
+      error: error.message || "Failed to delete expense",
+    };
+  }
+};
+
+export const updateExpense = async (expenseId, groupId, expenseData, actorId) => {
+  try {
+    if (!expenseId) {
+      throw new Error("Expense ID is required.");
+    }
+
+    const expenseRef = doc(db, "expenses", expenseId);
+    const snapshot = await getDoc(expenseRef);
+
+    if (!snapshot.exists()) {
+      throw new Error("Expense not found.");
+    }
+
+    const existingExpense = snapshot.data();
+
+    if (existingExpense.createdBy !== actorId) {
+      throw new Error("Only the person who added this expense can edit it.");
+    }
+
+    const sanitizedExpense = sanitizeExpensePayload(groupId, expenseData);
+
+    await updateDoc(expenseRef, {
+      ...sanitizedExpense,
+      updatedAt: serverTimestamp(),
+    });
+
+    await updateGroupActivity(groupId);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Update expense error:", error);
+    return {
+      success: false,
+      error: error.message || "Failed to update expense",
+    };
+  }
+};
+
+export const deleteExpenseByActor = async (expenseId, actorId) => {
+  try {
+    if (!expenseId) {
+      throw new Error("Expense ID is required.");
+    }
+
+    const expenseRef = doc(db, "expenses", expenseId);
+    const snapshot = await getDoc(expenseRef);
+
+    if (!snapshot.exists()) {
+      throw new Error("Expense not found.");
+    }
+
+    const expense = snapshot.data();
+
+    if (expense.createdBy !== actorId) {
+      throw new Error("Only the person who added this expense can delete it.");
+    }
+
+    await deleteDoc(expenseRef);
+
+    if (expense.groupId) {
+      await updateGroupActivity(expense.groupId);
+    }
+
     return { success: true };
   } catch (error) {
     console.error("Delete expense error:", error);

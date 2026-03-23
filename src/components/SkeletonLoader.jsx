@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { StyleSheet, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 
 import Animated, {
   interpolate,
@@ -41,12 +42,29 @@ export default function SkeletonLoader({
   */
 
   const shimmerStyle = useAnimatedStyle(() => {
-    const translateX = interpolate(shimmer.value, [0, 1], [-200, 200]);
+    const translateX = interpolate(shimmer.value, [0, 1], [-220, 260]);
 
     return {
       transform: [{ translateX }],
     };
   });
+
+  const renderShimmer = () => (
+    <Animated.View style={[styles.shimmerTrack, shimmerStyle]}>
+      <LinearGradient
+        colors={[
+          "rgba(255,255,255,0)",
+          "rgba(148,163,184,0.08)",
+          "rgba(255,255,255,0.18)",
+          "rgba(148,163,184,0.08)",
+          "rgba(255,255,255,0)",
+        ]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.shimmerGradient}
+      />
+    </Animated.View>
+  );
 
   /*
   |--------------------------------------------------------------------------
@@ -58,7 +76,7 @@ export default function SkeletonLoader({
     if (variant === "avatar") {
       return (
         <View key={key} style={styles.avatar}>
-          <Animated.View style={[styles.shimmer, shimmerStyle]} />
+          {renderShimmer()}
         </View>
       );
     }
@@ -66,7 +84,50 @@ export default function SkeletonLoader({
     if (variant === "text") {
       return (
         <View key={key} style={[styles.text, { width }]}>
-          <Animated.View style={[styles.shimmer, shimmerStyle]} />
+          {renderShimmer()}
+        </View>
+      );
+    }
+
+    if (variant === "home") {
+      return (
+        <View key={key} style={styles.homeWrap}>
+          <View style={styles.homeHeader}>
+            <View style={styles.homeHeaderText}>
+              <View style={[styles.text, styles.homeKicker]}>
+                {renderShimmer()}
+              </View>
+              <View style={[styles.text, styles.homeGreeting]}>
+                {renderShimmer()}
+              </View>
+            </View>
+            <View style={styles.homeAvatar}>
+              {renderShimmer()}
+            </View>
+          </View>
+
+          <View style={styles.homeSearch}>
+            {renderShimmer()}
+          </View>
+
+          <View style={styles.homeStatsRow}>
+            <View style={styles.homeStatCard}>
+              {renderShimmer()}
+            </View>
+            <View style={styles.homeStatCard}>
+              {renderShimmer()}
+            </View>
+          </View>
+
+          <View style={[styles.text, styles.homeSectionTitle]}>
+            {renderShimmer()}
+          </View>
+
+          {Array.from({ length: 4 }).map((_, index) => (
+            <View key={`home-card-${index}`} style={styles.card}>
+              {renderShimmer()}
+            </View>
+          ))}
         </View>
       );
     }
@@ -76,23 +137,23 @@ export default function SkeletonLoader({
         <View key={key} style={styles.expenseRow}>
           {/* Left circle */}
           <View style={styles.expenseIcon}>
-            <Animated.View style={[styles.shimmer, shimmerStyle]} />
+            {renderShimmer()}
           </View>
 
           {/* Center text lines */}
           <View style={styles.expenseCenter}>
             <View style={styles.line}>
-              <Animated.View style={[styles.shimmer, shimmerStyle]} />
+              {renderShimmer()}
             </View>
 
             <View style={[styles.line, { width: "60%" }]}>
-              <Animated.View style={[styles.shimmer, shimmerStyle]} />
+              {renderShimmer()}
             </View>
           </View>
 
           {/* Right amount */}
           <View style={styles.expenseRight}>
-            <Animated.View style={[styles.shimmer, shimmerStyle]} />
+            {renderShimmer()}
           </View>
         </View>
       );
@@ -106,7 +167,7 @@ export default function SkeletonLoader({
 
     return (
       <View key={key} style={styles.card}>
-        <Animated.View style={[styles.shimmer, shimmerStyle]} />
+        {renderShimmer()}
       </View>
     );
   };
@@ -121,35 +182,97 @@ export default function SkeletonLoader({
 */
 
 const styles = StyleSheet.create({
-  shimmer: {
+  shimmerTrack: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "#374151",
-    opacity: 0.4,
+    width: "55%",
+  },
+  shimmerGradient: {
+    flex: 1,
   },
 
   card: {
     height: 70,
     width: "100%",
     borderRadius: radius.md,
-    backgroundColor: "#1F2937",
+    backgroundColor: "rgba(15,23,42,0.88)",
     overflow: "hidden",
     marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.12)",
   },
 
   avatar: {
     width: 40,
     height: 40,
     borderRadius: radius.full,
-    backgroundColor: "#1F2937",
+    backgroundColor: "rgba(15,23,42,0.88)",
     overflow: "hidden",
   },
 
   text: {
     height: 14,
     borderRadius: radius.sm,
-    backgroundColor: "#1F2937",
+    backgroundColor: "rgba(15,23,42,0.88)",
     overflow: "hidden",
     marginBottom: spacing.sm,
+  },
+  homeWrap: {
+    paddingBottom: 4,
+  },
+  homeHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 18,
+  },
+  homeHeaderText: {
+    flex: 1,
+    marginRight: 16,
+  },
+  homeKicker: {
+    width: "44%",
+  },
+  homeGreeting: {
+    width: "72%",
+    height: 24,
+    marginBottom: 0,
+  },
+  homeAvatar: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    backgroundColor: "rgba(15,23,42,0.88)",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.12)",
+    overflow: "hidden",
+  },
+  homeSearch: {
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: "rgba(15,23,42,0.88)",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.12)",
+    overflow: "hidden",
+    marginBottom: 20,
+  },
+  homeStatsRow: {
+    flexDirection: "row",
+    gap: 14,
+    marginBottom: 26,
+  },
+  homeStatCard: {
+    flex: 1,
+    minHeight: 74,
+    borderRadius: 12,
+    backgroundColor: "rgba(15,23,42,0.88)",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.14)",
+    overflow: "hidden",
+  },
+  homeSectionTitle: {
+    width: 110,
+    height: 16,
+    marginBottom: 16,
   },
 
   expenseRow: {
@@ -162,7 +285,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radius.sm,
-    backgroundColor: "#1F2937",
+    backgroundColor: "rgba(15,23,42,0.88)",
     overflow: "hidden",
     marginRight: spacing.md,
   },
@@ -173,7 +296,7 @@ const styles = StyleSheet.create({
 
   line: {
     height: 12,
-    backgroundColor: "#1F2937",
+    backgroundColor: "rgba(15,23,42,0.88)",
     borderRadius: radius.sm,
     marginBottom: spacing.sm,
     overflow: "hidden",
@@ -183,7 +306,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 16,
     borderRadius: radius.sm,
-    backgroundColor: "#1F2937",
+    backgroundColor: "rgba(15,23,42,0.88)",
     overflow: "hidden",
   },
 });

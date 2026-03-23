@@ -11,11 +11,13 @@ import {
 
 import { Ionicons } from "@expo/vector-icons";
 import Animated, { FadeInDown } from "react-native-reanimated";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
 import SkeletonLoader from "../components/SkeletonLoader";
 import { colors, spacing } from "../constants/theme";
 import { useAuth } from "../context/useAuth";
+import { getExpenseShareForUser } from "../services/balanceCalculator";
 import { getUserExpenses } from "../services/expenseService";
 
 const filters = ["All", "This Week", "This Month"];
@@ -40,6 +42,7 @@ function SummaryCard({ label, value, highlight }) {
 
 export default function ActivityScreen() {
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
 
   const [expenses, setExpenses] = useState([]);
   const [selectedFilter, setSelectedFilter] = useState("All");
@@ -94,15 +97,30 @@ export default function ActivityScreen() {
     }, {});
   }, [filtered]);
 
-  const totalSpent = filtered.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const totalOwe = filtered
-    .filter((item) => item.paidBy !== user?.uid)
-    .reduce((sum, item) => sum + Number(item.amount || 0) / (item.splitBetween?.length || 1), 0);
+  const totals = useMemo(() => {
+    return filtered.reduce(
+      (acc, item) => {
+        const totalAmount = Number(item.amount || 0);
+        const userShare = getExpenseShareForUser(item, user?.uid);
+
+        acc.tracked += totalAmount;
+
+        if (item.paidBy === user?.uid) {
+          acc.owed += Math.max(totalAmount - userShare, 0);
+        } else {
+          acc.owe += userShare;
+        }
+
+        return acc;
+      },
+      { tracked: 0, owed: 0, owe: 0 },
+    );
+  }, [filtered, user?.uid]);
 
   const sections = Object.entries(grouped);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) + 6 }]}>
       <StatusBar barStyle="light-content" />
       <AnimatedBackdrop />
 
@@ -137,8 +155,8 @@ export default function ActivityScreen() {
       </Animated.View>
 
       <Animated.View entering={FadeInDown.delay(160).springify()} style={styles.summaryRow}>
-        <SummaryCard label="Total Spent" value={`Rs ${totalSpent.toFixed(2)}`} />
-        <SummaryCard label="You Owe" value={`Rs ${totalOwe.toFixed(2)}`} highlight />
+        <SummaryCard label="You Are Owed" value={`Rs ${totals.owed.toFixed(2)}`} highlight />
+        <SummaryCard label="You Owe" value={`Rs ${totals.owe.toFixed(2)}`} />
       </Animated.View>
 
       {loading ? (
@@ -169,7 +187,8 @@ export default function ActivityScreen() {
               {items.map((expense, index) => {
                 const color = categoryColors[expense.category] || categoryColors.Other;
                 const youPaid = expense.paidBy === user?.uid;
-                const share = Number(expense.amount || 0) / (expense.splitBetween?.length || 1);
+                const share = getExpenseShareForUser(expense, user?.uid);
+                const othersShare = Math.max(Number(expense.amount || 0) - share, 0);
 
                 return (
                   <Animated.View
@@ -186,14 +205,14 @@ export default function ActivityScreen() {
                       <View style={styles.activityTop}>
                         <Text style={styles.activityName}>{expense.description}</Text>
                         <Text style={[styles.activityAmount, youPaid && styles.positiveAmount]}>
-                          {youPaid ? "+" : "-"}Rs {share.toFixed(2)}
+                          {youPaid ? "+" : "-"}Rs {(youPaid ? othersShare : share).toFixed(2)}
                         </Text>
                       </View>
 
                       <Text style={styles.activityMeta}>
                         {youPaid
-                          ? `${expense.createdByName || "You"} paid for the group`
-                          : `Split with ${expense.createdByName || "your group"}`}
+                          ? `You paid in ${expense.groupName || "your group"}`
+                          : `Paid by ${expense.paidByName || "your group"}`}
                       </Text>
 
                       <View style={styles.activityBottom}>
@@ -222,7 +241,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#020617",
     paddingHorizontal: 20,
-    paddingTop: 18,
   },
   header: {
     flexDirection: "row",
@@ -291,7 +309,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 76,
     borderRadius: 12,
-    backgroundColor: "rgba(30,41,59,0.72)",
+    backgroundColor: "rgba(15,23,42,0.88)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     padding: 14,
@@ -315,7 +333,7 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   summaryValueHighlight: {
-    color: "#A78BFA",
+    color: "#9a5cc7",
   },
   listContent: {
     paddingBottom: 120,

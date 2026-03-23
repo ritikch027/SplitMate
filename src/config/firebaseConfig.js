@@ -33,7 +33,9 @@ try {
 
 export const auth = authInstance;
 export const db = getFirestore(app);
-export const storage = getStorage(app);
+export const storage = firebaseConfig.storageBucket
+  ? getStorage(app, `gs://${firebaseConfig.storageBucket}`)
+  : getStorage(app);
 
 if (__DEV__) {
   console.log("✅ Firebase initialized successfully");
