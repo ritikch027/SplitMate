@@ -135,7 +135,7 @@ function ExpenseCard({ item, userId, onEdit, onDelete, index }) {
 ──────────────────────────────────────────────────────────────*/
 export default function GroupDetailsScreen({ navigation, route }) {
   const { groupId } = route.params;
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
   const insets = useSafeAreaInsets();
   const { showAlert } = useAlert();
 
@@ -223,7 +223,12 @@ export default function GroupDetailsScreen({ navigation, route }) {
       }
 
       const newMember = lookup.users[0];
-      const result = await addMemberToGroup(groupId, newMember.id);
+      const result = await addMemberToGroup(
+        groupId,
+        newMember.id,
+        user.uid,
+        userProfile?.name || userProfile?.phone || "Someone",
+      );
 
       if (!result.success) {
         showAlert({ title: "Error", message: result.error, variant: "error" });
@@ -254,7 +259,12 @@ export default function GroupDetailsScreen({ navigation, route }) {
 
   /* Remove member */
   const handleRemoveMember = async (memberId) => {
-    const result = await removeMemberFromGroup(groupId, memberId);
+    const result = await removeMemberFromGroup(
+      groupId,
+      memberId,
+      user.uid,
+      userProfile?.name || userProfile?.phone || "Someone",
+    );
     if (!result.success) {
       showAlert({ title: "Error", message: result.error, variant: "error" });
       return;

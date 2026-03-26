@@ -1,15 +1,17 @@
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  serverTimestamp,
-  setDoc,
-  where,
-} from "firebase/firestore";
+import { supabase } from "../config/supabaseConfig";
 
-import { db } from "../config/firebaseConfig";
+const USERS_TABLE = "users";
+
+const getUserServiceErrorMessage = (
+  error,
+  fallback = "User service request failed.",
+) => {
+  if (error?.code === "PGRST205") {
+    return "The Supabase 'users' table is missing. Create public.users and refresh the schema cache.";
+  }
+
+  return error?.message || fallback;
+};
 
 const ALLOWED_PROFILE_FIELDS = new Set([
   "name",
@@ -75,7 +77,9 @@ const sanitizeProfileUpdate = (data = {}) => {
     }
 
     if (key === "groups") {
-      sanitized.groups = Array.isArray(value) ? [...new Set(value.filter(Boolean))] : [];
+      sanitized.groups = Array.isArray(value)
+        ? [...new Set(value.filter(Boolean))]
+        : [];
     }
   });
 
@@ -88,20 +92,26 @@ const sanitizeProfileUpdate = (data = {}) => {
 |--------------------------------------------------------------------------
 | Creates a new user document if it does not already exist.
 |
-| Firestore path:
-| users/{userId}
+| Supabase table: users
 */
 export const createUser = async (userId, phoneNumber) => {
   try {
-    const userRef = doc(db, "users", userId);
-
     // Check if user already exists — don't overwrite returning users
-    const snapshot = await getDoc(userRef);
+    const { data: existingUser, error: fetchError } = await supabase
+      .from(USERS_TABLE)
+      .select("*")
+      .eq("id", userId)
+      .single();
 
-    if (snapshot.exists()) {
+    if (fetchError && fetchError.code !== "PGRST116") {
+      // PGRST116 is "not found"
+      throw fetchError;
+    }
+
+    if (existingUser) {
       return {
         success: true,
-        user: snapshot.data(),
+        user: existingUser,
       };
     }
 
@@ -111,21 +121,46 @@ export const createUser = async (userId, phoneNumber) => {
       name: "",
       photoUrl: "",
       profileCompleted: false,
-      createdAt: serverTimestamp(),
+      createdAt: new Date().toISOString(),
       groups: [],
     };
 
-    await setDoc(userRef, newUser);
+    const { data, error } = await supabase
+      .from(USERS_TABLE)
+      .insert(newUser)
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === "23505") {
+        // Another auth/bootstrap path may have created the same user row first.
+        const { data: existingAfterConflict, error: refetchError } =
+          await supabase
+            .from(USERS_TABLE)
+            .select("*")
+            .eq("id", userId)
+            .single();
+
+        if (!refetchError && existingAfterConflict) {
+          return {
+            success: true,
+            user: existingAfterConflict,
+          };
+        }
+      }
+
+      throw error;
+    }
 
     return {
       success: true,
-      user: newUser,
+      user: data,
     };
   } catch (error) {
     console.error("Create user error:", error);
     return {
       success: false,
-      error: error.message || "Failed to create user profile",
+      error: getUserServiceErrorMessage(error, "Failed to create user profile"),
     };
   }
 };
@@ -134,29 +169,35 @@ export const createUser = async (userId, phoneNumber) => {
 |--------------------------------------------------------------------------
 | getUser(userId)
 |--------------------------------------------------------------------------
-| Fetch user profile from Firestore.
+| Fetch user profile from Supabase.
 */
 export const getUser = async (userId) => {
   try {
-    const userRef = doc(db, "users", userId);
-    const snapshot = await getDoc(userRef);
+    const { data, error } = await supabase
+      .from(USERS_TABLE)
+      .select("*")
+      .eq("id", userId)
+      .single();
 
-    if (!snapshot.exists()) {
-      return {
-        success: false,
-        error: "User not found",
-      };
+    if (error) {
+      if (error.code === "PGRST116") {
+        return {
+          success: false,
+          error: "User not found",
+        };
+      }
+      throw error;
     }
 
     return {
       success: true,
-      user: snapshot.data(),
+      user: data,
     };
   } catch (error) {
     console.error("Get user error:", error);
     return {
       success: false,
-      error: error.message || "Failed to fetch user",
+      error: getUserServiceErrorMessage(error, "Failed to fetch user"),
     };
   }
 };
@@ -167,40 +208,36 @@ export const getUser = async (userId) => {
 |--------------------------------------------------------------------------
 | Updates fields for an existing user.
 |
-| Uses setDoc with merge: true so:
+| Uses upsert so:
 | - It CREATES the doc if it doesn't exist (no more "no document" error)
 | - It UPDATES only the provided fields if it does exist
-| - No extra getDoc check needed → no race conditions
+| - No extra get check needed → no race conditions
 |
 | Example usage:
 | updateUser(uid, { name: "Rahul", profileCompleted: true })
 */
 export const updateUser = async (userId, data) => {
   try {
-    const userRef = doc(db, "users", userId);
     const sanitizedData = sanitizeProfileUpdate(data);
 
     if (Object.keys(sanitizedData).length === 0) {
       throw new Error("No valid profile fields were provided.");
     }
 
-    // setDoc with merge: true is safer than updateDoc
-    // because it works whether or not the doc exists
-    await setDoc(
-      userRef,
-      {
-        ...sanitizedData,
-        updatedAt: serverTimestamp(),
-      },
-      { merge: true },
-    );
+    const { error } = await supabase.from(USERS_TABLE).upsert({
+      id: userId,
+      ...sanitizedData,
+      updatedAt: new Date().toISOString(),
+    });
+
+    if (error) throw error;
 
     return { success: true };
   } catch (error) {
     console.error("Update user error:", error);
     return {
       success: false,
-      error: error.message || "Failed to update user",
+      error: getUserServiceErrorMessage(error, "Failed to update user"),
     };
   }
 };
@@ -212,7 +249,7 @@ export const updateUser = async (userId, data) => {
 | Fetch multiple users by phone numbers.
 |
 | Used when adding members to a group.
-| Firestore "in" query supports max 10 items.
+| Supabase "in" query supports more than 10 items.
 */
 export const getUsersByPhone = async (phoneNumbers) => {
   try {
@@ -220,25 +257,19 @@ export const getUsersByPhone = async (phoneNumbers) => {
       return { success: true, users: [] };
     }
 
-    // Firestore allows max 10 values in "in" queries
-    const limitedNumbers = phoneNumbers.slice(0, 10);
+    const { data, error } = await supabase
+      .from(USERS_TABLE)
+      .select("*")
+      .in("phone", phoneNumbers);
 
-    const q = query(
-      collection(db, "users"),
-      where("phone", "in", limitedNumbers),
-    );
+    if (error) throw error;
 
-    const snapshot = await getDocs(q);
-
-    const users = [];
-    snapshot.forEach((doc) => users.push(doc.data()));
-
-    return { success: true, users };
+    return { success: true, users: data || [] };
   } catch (error) {
     console.error("Get users by phone error:", error);
     return {
       success: false,
-      error: error.message || "Failed to fetch users",
+      error: getUserServiceErrorMessage(error, "Failed to fetch users"),
     };
   }
 };
@@ -260,21 +291,19 @@ export const getUsersByIds = async (userIds) => {
 
     const uniqueIds = [...new Set(userIds)];
 
-    const users = [];
+    const { data, error } = await supabase
+      .from(USERS_TABLE)
+      .select("*")
+      .in("id", uniqueIds);
 
-    for (const userId of uniqueIds) {
-      const snapshot = await getDoc(doc(db, "users", userId));
-      if (snapshot.exists()) {
-        users.push(snapshot.data());
-      }
-    }
+    if (error) throw error;
 
-    return { success: true, users };
+    return { success: true, users: data || [] };
   } catch (error) {
     console.error("Get users by ids error:", error);
     return {
       success: false,
-      error: error.message || "Failed to fetch users",
+      error: getUserServiceErrorMessage(error, "Failed to fetch users"),
     };
   }
 };

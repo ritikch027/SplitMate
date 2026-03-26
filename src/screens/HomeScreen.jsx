@@ -14,6 +14,7 @@ import { Ionicons } from "@expo/vector-icons";
 import Animated, { FadeInDown } from "react-native-reanimated";
 
 import { useBottomTabBarHeight } from "@react-navigation/bottom-tabs";
+import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
 import GroupCard from "../components/GroupCard";
@@ -27,8 +28,12 @@ import {
   getTotalOwe,
   getTotalOwed,
 } from "../services/balanceCalculator";
-import { getUserExpenses } from "../services/expenseService";
-import { getUserGroups } from "../services/groupService";
+import {
+  getUserExpenses,
+  getUserExpensesOnce,
+} from "../services/expenseService";
+import { getUserGroups, getUserGroupsOnce } from "../services/groupService";
+import { getUserNotifications } from "../services/notificationService";
 import { getUsersByIds } from "../services/userService";
 
 function StatCard({ label, value, valueStyle, delay, onPress }) {
@@ -53,6 +58,27 @@ export default function HomeScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [allExpenses, setAllExpenses] = useState([]);
   const [memberProfilesById, setMemberProfilesById] = useState({});
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+
+  const loadLatestHomeData = React.useCallback(async () => {
+    if (!user) return;
+
+    const [groupsResult, expensesResult] = await Promise.all([
+      getUserGroupsOnce(user.uid),
+      getUserExpensesOnce(user.uid),
+    ]);
+
+    if (groupsResult.success) {
+      setGroups(groupsResult.groups);
+    }
+
+    if (expensesResult.success) {
+      setAllExpenses(expensesResult.expenses);
+    }
+
+    setLoading(false);
+    setRefreshing(false);
+  }, [user]);
 
   useEffect(() => {
     if (!user) return undefined;
@@ -72,6 +98,24 @@ export default function HomeScreen({ navigation }) {
       unsubscribeExpenses();
     };
   }, [user]);
+
+  useEffect(() => {
+    if (!user) return undefined;
+
+    const unsubscribe = getUserNotifications(user.uid, (notifications) => {
+      setUnreadNotifications(
+        notifications.filter((item) => !item.read).length,
+      );
+    });
+
+    return unsubscribe;
+  }, [user]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      loadLatestHomeData();
+    }, [loadLatestHomeData]),
+  );
 
   useEffect(() => {
     if (!groups.length) {
@@ -164,7 +208,10 @@ export default function HomeScreen({ navigation }) {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => setRefreshing(true)}
+            onRefresh={() => {
+              setRefreshing(true);
+              loadLatestHomeData();
+            }}
             tintColor={colors.accent}
           />
         }
@@ -184,18 +231,35 @@ export default function HomeScreen({ navigation }) {
                 </Text>
               </View>
 
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={() => navigation.navigate("Profile")}
-                style={styles.profileButton}
-              >
-                <MemberAvatar
-                  name={userProfile?.name || userProfile?.phone || "User"}
-                  photoUrl={userProfile?.photoUrl}
-                  size="medium"
-                  showOnline
-                />
-              </TouchableOpacity>
+              <View style={styles.headerActions}>
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => navigation.navigate("NotificationsScreen")}
+                  style={styles.notificationButton}
+                >
+                  <Ionicons
+                    name="notifications-outline"
+                    size={21}
+                    color="#E2E8F0"
+                  />
+                  {unreadNotifications > 0 ? (
+                    <View style={styles.notificationDot} />
+                  ) : null}
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={() => navigation.navigate("Profile")}
+                  style={styles.profileButton}
+                >
+                  <MemberAvatar
+                    name={userProfile?.name || userProfile?.phone || "User"}
+                    photoUrl={userProfile?.photoUrl}
+                    size="medium"
+                    showOnline
+                  />
+                </TouchableOpacity>
+              </View>
             </Animated.View>
 
             <Animated.View
@@ -279,6 +343,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 18,
   },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
   kicker: {
     color: "#97A2B8",
     fontSize: 14,
@@ -297,6 +366,27 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "rgba(124,58,237,0.28)",
     backgroundColor: "rgba(30,41,59,0.76)",
+  },
+  notificationButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.14)",
+    backgroundColor: "rgba(15,23,42,0.88)",
+  },
+  notificationDot: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    width: 9,
+    height: 9,
+    borderRadius: 999,
+    backgroundColor: "#EF4444",
+    borderWidth: 1.5,
+    borderColor: "#0F172A",
   },
   searchWrap: {
     height: 42,

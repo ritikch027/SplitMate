@@ -1,10 +1,11 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/useAuth";
+import { getUserNotifications } from "../services/notificationService";
 
 /* Screens */
 import ActivityScreen from "../screens/ActivityScreen";
@@ -15,6 +16,7 @@ import CreateGroupScreen from "../screens/CreateGroupScreen.jsx";
 import GroupDetailsScreen from "../screens/GroupDetailsScreen";
 import HomeScreen from "../screens/HomeScreen";
 import LoginScreen from "../screens/LoginScreen";
+import NotificationsScreen from "../screens/NotificationsScreen";
 import OTPScreen from "../screens/OTPScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 
@@ -77,9 +79,23 @@ const HomeTab = () => (
   Main Tabs
   Bottom tab bar shown to logged-in users
 ──────────────────────────────────────────────────────────────*/
-const MainTabs = () => (
-  <Tab.Navigator
-    screenOptions={({ route }) => ({
+const MainTabs = () => {
+  const { user } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!user) return undefined;
+
+    const unsubscribe = getUserNotifications(user.uid, (notifications) => {
+      setUnreadCount(notifications.filter((item) => !item.read).length);
+    });
+
+    return unsubscribe;
+  }, [user]);
+
+  return (
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
       headerShown: false,
       tabBarStyle: styles.tabBar,
       tabBarActiveTintColor: "#7C3AED",
@@ -99,25 +115,29 @@ const MainTabs = () => (
           <Ionicons name={iconName} size={focused ? 26 : 22} color={color} />
         );
       },
-    })}
-  >
-    <Tab.Screen
-      name="HomeTab"
-      component={HomeTab}
-      options={{ tabBarLabel: "Home" }}
-    />
-    <Tab.Screen
-      name="Activity"
-      component={ActivityScreen}
-      options={{ tabBarLabel: "Activity" }}
-    />
-    <Tab.Screen
-      name="Profile"
-      component={ProfileScreen}
-      options={{ tabBarLabel: "Profile" }}
-    />
-  </Tab.Navigator>
-);
+      })}
+    >
+      <Tab.Screen
+        name="HomeTab"
+        component={HomeTab}
+        options={{ tabBarLabel: "Home" }}
+      />
+      <Tab.Screen
+        name="Activity"
+        component={ActivityScreen}
+        options={{ tabBarLabel: "Activity" }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{
+          tabBarLabel: "Profile",
+          tabBarBadge: unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : undefined,
+        }}
+      />
+    </Tab.Navigator>
+  );
+};
 
 /*──────────────────────────────────────────────────────────────
   Main Stack
@@ -138,6 +158,7 @@ const MainStack = () => (
     <Stack.Screen name="CreateGroupScreen" component={CreateGroupScreen} />
     <Stack.Screen name="AddExpenseScreen" component={AddExpenseScreen} />
     <Stack.Screen name="BalanceBreakdownScreen" component={BalanceBreakdownScreen} />
+    <Stack.Screen name="NotificationsScreen" component={NotificationsScreen} />
   </Stack.Navigator>
 );
 

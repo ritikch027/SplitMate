@@ -1,16 +1,25 @@
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { auth, db } from "../config/firebaseConfig";
+import { supabase } from "../config/supabaseConfig";
 import { colors } from "../constants/theme";
-import { AlertContext } from "./AlertContext";
+import { initializePushNotifications } from "../services/pushNotificationService";
 import { createUser } from "../services/userService";
 import { getReadableError } from "../utils/appError";
-import { AuthContext } from "./AuthContext"; // Create this file if it doesn't exist
+import { AlertContext } from "./AlertContext";
+import { AuthContext } from "./AuthContext";
 
 const getProfileCacheKey = (uid) => `splitmate:user-profile:${uid}`;
+
+const normalizeAuthUser = (supabaseUser) => {
+  if (!supabaseUser) return null;
+
+  return {
+    ...supabaseUser,
+    uid: supabaseUser.id,
+    phoneNumber: supabaseUser.phone || "",
+  };
+};
 
 const AuthProvider = ({ children }) => {
   const { showAlert } = useContext(AlertContext);
@@ -20,47 +29,58 @@ const AuthProvider = ({ children }) => {
   const [profileLoading, setProfileLoading] = useState(false);
   const lastProfileErrorRef = useRef("");
 
-  const fetchUserProfile = useCallback(async (uid, phoneNumber = "") => {
-    try {
-      setProfileLoading(true);
-      const docRef = doc(db, "users", uid);
-      const docSnap = await getDoc(docRef);
+  const fetchUserProfile = useCallback(
+    async (uid, phoneNumber = "") => {
+      try {
+        setProfileLoading(true);
+        const { data, error } = await supabase
+          .from("users")
+          .select("*")
+          .eq("id", uid)
+          .single();
 
-      if (docSnap.exists()) {
-        const profileData = docSnap.data();
-        setUserProfile(profileData);
-        await AsyncStorage.setItem(
-          getProfileCacheKey(uid),
-          JSON.stringify(profileData),
-        );
-      } else {
-        const result = await createUser(uid, phoneNumber);
-        if (result.success) {
-          setUserProfile(result.user);
+        if (error && error.code !== "PGRST116") {
+          throw error;
+        }
+
+        if (data) {
+          setUserProfile(data);
           await AsyncStorage.setItem(
             getProfileCacheKey(uid),
-            JSON.stringify(result.user),
+            JSON.stringify(data),
           );
         } else {
-          setUserProfile(null);
+          const result = await createUser(uid, phoneNumber);
+          if (result.success) {
+            setUserProfile(result.user);
+            await AsyncStorage.setItem(
+              getProfileCacheKey(uid),
+              JSON.stringify(result.user),
+            );
+          } else {
+            setUserProfile(null);
+          }
         }
-      }
-    } catch (e) {
-      console.error("Error fetching profile:", e);
-      const friendlyError = getReadableError(
-        e,
-        "We couldn't load your profile right now.",
-      );
+      } catch (e) {
+        console.error("Error fetching profile:", e);
+        const friendlyError = getReadableError(
+          e,
+          "We couldn't load your profile right now.",
+        );
 
-      if (lastProfileErrorRef.current !== friendlyError.title + friendlyError.message) {
-        lastProfileErrorRef.current = friendlyError.title + friendlyError.message;
-        showAlert({
-          ...friendlyError,
-          duration: 3500,
-        });
-      }
+        if (
+          lastProfileErrorRef.current !==
+          friendlyError.title + friendlyError.message
+        ) {
+          lastProfileErrorRef.current =
+            friendlyError.title + friendlyError.message;
+          showAlert({
+            ...friendlyError,
+            duration: 3500,
+          });
+        }
 
-      const fallbackProfile = {
+        const fallbackProfile = {
           id: uid,
           phone: phoneNumber || "",
           name: "",
@@ -69,32 +89,36 @@ const AuthProvider = ({ children }) => {
           profileCompleted: true,
         };
 
-      let hasCachedProfile = false;
+        let hasCachedProfile = false;
 
-      setUserProfile((current) => {
-        hasCachedProfile = Boolean(current);
-        return current || fallbackProfile;
-      });
+        setUserProfile((current) => {
+          hasCachedProfile = Boolean(current);
+          return current || fallbackProfile;
+        });
 
-      try {
-        if (!hasCachedProfile) {
-          const cachedProfile = await AsyncStorage.getItem(getProfileCacheKey(uid));
-          if (cachedProfile) {
-            setUserProfile(JSON.parse(cachedProfile));
-          } else {
-            await AsyncStorage.setItem(
+        try {
+          if (!hasCachedProfile) {
+            const cachedProfile = await AsyncStorage.getItem(
               getProfileCacheKey(uid),
-              JSON.stringify(fallbackProfile),
             );
+            if (cachedProfile) {
+              setUserProfile(JSON.parse(cachedProfile));
+            } else {
+              await AsyncStorage.setItem(
+                getProfileCacheKey(uid),
+                JSON.stringify(fallbackProfile),
+              );
+            }
           }
+        } catch (_cacheError) {
+          // Ignore cache failures and keep fallback profile in memory.
         }
-      } catch (_cacheError) {
-        // Ignore cache failures and keep fallback profile in memory.
+      } finally {
+        setProfileLoading(false);
       }
-    } finally {
-      setProfileLoading(false);
-    }
-  }, [showAlert]);
+    },
+    [showAlert],
+  );
 
   const refreshUserProfile = async () => {
     if (user) await fetchUserProfile(user.uid, user.phoneNumber || "");
@@ -103,22 +127,27 @@ const AuthProvider = ({ children }) => {
   useEffect(() => {
     let isMounted = true;
 
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
 
-      if (firebaseUser) {
-        setUser(firebaseUser);
+      const supabaseUser = session?.user;
+
+      if (supabaseUser) {
+        const normalizedUser = normalizeAuthUser(supabaseUser);
+        setUser(normalizedUser);
         try {
           const cachedProfile = await AsyncStorage.getItem(
-            getProfileCacheKey(firebaseUser.uid),
+            getProfileCacheKey(supabaseUser.id),
           );
 
           if (cachedProfile && isMounted) {
             setUserProfile(JSON.parse(cachedProfile));
           } else if (isMounted) {
             setUserProfile({
-              id: firebaseUser.uid,
-              phone: firebaseUser.phoneNumber || "",
+              id: supabaseUser.id,
+              phone: normalizedUser.phoneNumber,
               name: "",
               photoUrl: "",
               groups: [],
@@ -128,8 +157,8 @@ const AuthProvider = ({ children }) => {
         } catch (_cacheError) {
           if (isMounted) {
             setUserProfile({
-              id: firebaseUser.uid,
-              phone: firebaseUser.phoneNumber || "",
+              id: supabaseUser.id,
+              phone: normalizedUser.phoneNumber,
               name: "",
               photoUrl: "",
               groups: [],
@@ -139,7 +168,8 @@ const AuthProvider = ({ children }) => {
         }
 
         if (isMounted) setLoading(false);
-        fetchUserProfile(firebaseUser.uid, firebaseUser.phoneNumber || "");
+        fetchUserProfile(normalizedUser.uid, normalizedUser.phoneNumber);
+        initializePushNotifications(normalizedUser.uid);
       } else {
         setUser(null);
         setUserProfile(null);
@@ -149,7 +179,7 @@ const AuthProvider = ({ children }) => {
 
     return () => {
       isMounted = false;
-      unsubscribe();
+      subscription.unsubscribe();
     };
   }, [fetchUserProfile]);
 

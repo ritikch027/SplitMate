@@ -21,8 +21,9 @@ import { colors, fontSize, radius, spacing } from "../constants/theme";
 import { useAlert } from "../context/useAlert";
 import { useAuth } from "../context/useAuth";
 import { signOut } from "../services/authService";
-import { getUserExpensesOnce } from "../services/expenseService";
+import { getUserExpenses } from "../services/expenseService";
 import { getUserGroups } from "../services/groupService";
+import { getUserNotifications } from "../services/notificationService";
 import { uploadProfilePhoto } from "../services/storageService";
 import { getUser, updateUser } from "../services/userService";
 import { getReadableError } from "../utils/appError";
@@ -30,20 +31,30 @@ import { getReadableError } from "../utils/appError";
 /*──────────────────────────────────────────────────────────────
   StatCard
 ──────────────────────────────────────────────────────────────*/
-function StatCard({ label, value, highlight = false, delay }) {
+function StatCard({ label, value, highlight = false, delay, onPress }) {
+  const content = (
+    <Animated.View style={styles.statCard}>
+      <Text style={styles.statLabel}>{label}</Text>
+      <Text
+        style={[styles.statValue, highlight && styles.statValueHighlight]}
+      >
+        {value}
+      </Text>
+    </Animated.View>
+  );
+
   return (
     <Animated.View
       entering={FadeInDown.delay(delay).springify()}
       style={styles.statCardWrap}
     >
-      <Animated.View style={styles.statCard}>
-        <Text style={styles.statLabel}>{label}</Text>
-        <Text
-          style={[styles.statValue, highlight && styles.statValueHighlight]}
-        >
-          {value}
-        </Text>
-      </Animated.View>
+      {onPress ? (
+        <TouchableOpacity activeOpacity={0.88} onPress={onPress}>
+          {content}
+        </TouchableOpacity>
+      ) : (
+        content
+      )}
     </Animated.View>
   );
 }
@@ -85,7 +96,7 @@ function SettingRow({
 /*──────────────────────────────────────────────────────────────
   ProfileScreen
 ──────────────────────────────────────────────────────────────*/
-export default function ProfileScreen() {
+export default function ProfileScreen({ navigation }) {
   const { user, userProfile, refreshUserProfile } = useAuth();
   const insets = useSafeAreaInsets();
   const { showAlert } = useAlert();
@@ -99,6 +110,7 @@ export default function ProfileScreen() {
   const [photoUri, setPhotoUri] = useState("");
   const [saving, setSaving] = useState(false);
   const [profileLoading, setProfileLoading] = useState(true);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
 
   /*
   |------------------------------------------------------------------
@@ -171,29 +183,37 @@ export default function ProfileScreen() {
     return unsubscribe; // ← correct: returns cleanup function
   }, [user]);
 
+  useEffect(() => {
+    if (!user) return undefined;
+
+    const unsubscribe = getUserNotifications(user.uid, (notifications) => {
+      setUnreadNotifications(
+        notifications.filter((item) => !item.read).length,
+      );
+    });
+
+    return unsubscribe;
+  }, [user]);
+
   /*
   |------------------------------------------------------------------
-  | One-time fetch → expense stats
+  | Real-time listener → expense stats
   |------------------------------------------------------------------
-  | ✅ getUserExpensesOnce is async → wrapped in inner function
-  | ✅ Promise NOT returned to React
+  | Keeps the tracked amount in sync when expenses are added, edited,
+  | or removed anywhere in the app.
   */
   useEffect(() => {
     if (!user) return;
 
-    const loadExpenses = async () => {
-      const result = await getUserExpensesOnce(user.uid);
+    const unsubscribe = getUserExpenses(user.uid, (expenses) => {
+      const total = expenses.reduce(
+        (sum, expense) => sum + Number(expense.amount || 0),
+        0,
+      );
+      setTotalExpenses(Number(total.toFixed(2)));
+    });
 
-      if (result.success) {
-        const total = result.expenses.reduce(
-          (sum, expense) => sum + expense.amount,
-          0,
-        );
-        setTotalExpenses(total);
-      }
-    };
-
-    loadExpenses(); // ← called immediately, Promise not returned
+    return unsubscribe;
   }, [user]);
 
   /*──────────────────────────────────────────────────────────────
@@ -343,12 +363,18 @@ export default function ProfileScreen() {
 
         {/* ── Stats ── */}
         <View style={styles.statsRow}>
-          <StatCard label="Groups" value={groupsCount} delay={100} />
+          <StatCard
+            label="Groups"
+            value={groupsCount}
+            delay={100}
+            onPress={() => navigation.navigate("HomeTab")}
+          />
           <StatCard
             label="Tracked"
             value={formatCurrency(totalExpenses)}
             highlight
             delay={180}
+            onPress={() => navigation.navigate("Activity")}
           />
         </View>
 
@@ -392,8 +418,8 @@ export default function ProfileScreen() {
             iconColor="#FB923C"
             iconBg="rgba(249,115,22,0.14)"
             delay={440}
-            showDot
-            onPress={() => {}}
+            showDot={unreadNotifications > 0}
+            onPress={() => navigation.navigate("NotificationsScreen")}
           />
         </View>
 

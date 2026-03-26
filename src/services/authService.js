@@ -1,15 +1,12 @@
+import { supabase } from "../config/supabaseConfig";
 import {
-  onAuthStateChanged as firebaseOnAuthStateChanged,
-  signOut as firebaseSignOut,
-  getAuth,
-  signInWithPhoneNumber,
-} from "firebase/auth";
-
-import { auth } from "../config/firebaseConfig";
-import { clearRateLimit, enforceCooldown, enforceRateLimit } from "../utils/rateLimit";
+  clearRateLimit,
+  enforceCooldown,
+  enforceRateLimit,
+} from "../utils/rateLimit";
+import { unregisterPushTokenForUser } from "./pushNotificationService";
 import { createUser } from "./userService";
 
-let confirmationResult = null;
 let lastOtpPhoneNumber = null;
 let verifyAttemptCount = 0;
 
@@ -26,60 +23,64 @@ const normalizePhoneNumber = (phoneNumber) => {
     throw new Error("Enter a valid 10-digit phone number.");
   }
 
-  return `+91${localDigits}`;
+  return `91${localDigits}`;
+};
+
+const sendOTPphone = (phoneNum) => {
+  return `+${phoneNum}`;
 };
 
 /*
 |--------------------------------------------------------------------------
-| sendOTP(phoneNumber, recaptchaVerifier)
+| sendOTP(phoneNumber)
 |--------------------------------------------------------------------------
-| Sends OTP to user using Firebase Phone Authentication.
+| Sends OTP to user using Supabase Phone Authentication.
 |
 | Steps:
 | 1. Ensure phone number is formatted to E.164 (+91XXXXXXXXXX)
-| 2. Call Firebase signInWithPhoneNumber with recaptcha verifier
-| 3. Store confirmation result
-| 4. Return success response
+| 2. Call Supabase signInWithOtp
+| 3. Return success response
 |
-| Note: recaptchaVerifier comes from FirebaseRecaptchaVerifierModal
+| Note: No recaptchaVerifier needed - Supabase handles verification automatically
 */
-export const sendOTP = async (phoneNumber, recaptchaVerifier) => {
+export const sendOTP = async (phoneNumber) => {
   try {
     const formattedNumber = normalizePhoneNumber(phoneNumber);
+    const verifyNum = sendOTPphone(formattedNumber);
 
-    // Check if recaptcha verifier is provided
-    if (!recaptchaVerifier) {
-      throw new Error("Recaptcha verifier not initialized. Please try again.");
-    }
-
-    const cooldown = enforceCooldown(`otp-cooldown:${formattedNumber}`, OTP_SEND_COOLDOWN_MS);
+    const cooldown = enforceCooldown(
+      `otp-cooldown:${verifyNum}`,
+      OTP_SEND_COOLDOWN_MS,
+    );
     if (!cooldown.allowed) {
       const seconds = Math.ceil(cooldown.retryAfterMs / 1000);
       throw new Error(`Please wait ${seconds}s before requesting another OTP.`);
     }
 
-    const sendWindow = enforceRateLimit(`otp-window:${formattedNumber}`, {
+    const sendWindow = enforceRateLimit(`otp-window:${verifyNum}`, {
       limit: OTP_SEND_LIMIT,
       windowMs: OTP_SEND_WINDOW_MS,
     });
     if (!sendWindow.allowed) {
       const minutes = Math.ceil(sendWindow.retryAfterMs / (60 * 1000));
-      throw new Error(`Too many OTP requests. Try again in ${minutes} minute(s).`);
+      throw new Error(
+        `Too many OTP requests. Try again in ${minutes} minute(s).`,
+      );
     }
 
-    // Call Firebase phone auth with recaptcha verifier
-    const confirmation = await signInWithPhoneNumber(
-      auth,
-      formattedNumber,
-      recaptchaVerifier,
-    );
+    // Call Supabase phone auth
+    const { error } = await supabase.auth.signInWithOtp({
+      phone: verifyNum,
+    });
 
-    // Store confirmation result for later OTP verification
-    confirmationResult = confirmation;
-    lastOtpPhoneNumber = formattedNumber;
+    if (error) {
+      throw error;
+    }
+
+    lastOtpPhoneNumber = verifyNum;
     verifyAttemptCount = 0;
 
-    console.log("OTP sent successfully to", formattedNumber);
+    console.log("OTP sent successfully to", verifyNum);
     return { success: true };
   } catch (error) {
     console.error("Send OTP Error:", error);
@@ -93,27 +94,39 @@ export const sendOTP = async (phoneNumber, recaptchaVerifier) => {
 
 /*
 |--------------------------------------------------------------------------
-| verifyOTP(otp)
+| verifyOTP(phoneNumber, otp)
 |--------------------------------------------------------------------------
 | Verifies the OTP entered by the user.
 |
 | Steps:
-| 1. Check confirmation result exists
-| 2. Call confirmation.confirm(otp)
-| 3. Firebase signs user in automatically
-| 4. Create Firestore user doc (setDoc merge so safe for returning users)
+| 1. Format phone number
+| 2. Call Supabase verifyOtp
+| 3. Supabase signs user in automatically
+| 4. Create user profile in database (upsert so safe for returning users)
 | 5. Return authenticated user
 */
-export const verifyOTP = async (otp) => {
+export const verifyOTP = async (phoneNumber, otp) => {
   try {
-    if (!confirmationResult) {
+    // Backward compatibility: allow older call sites that passed only the OTP.
+    if (otp === undefined && /^\d{6}$/.test(String(phoneNumber || "").trim())) {
+      otp = phoneNumber;
+      phoneNumber = lastOtpPhoneNumber;
+    }
+
+    if (!phoneNumber) {
+      phoneNumber = lastOtpPhoneNumber;
+    }
+
+    if (!phoneNumber) {
       return {
         success: false,
-        error: "OTP session expired. Please request a new OTP.",
+        error: "Phone number not provided. Please request OTP again.",
       };
     }
 
+    const formattedNumber = normalizePhoneNumber(phoneNumber);
     const code = String(otp || "").trim();
+
     if (!/^\d{6}$/.test(code)) {
       return {
         success: false,
@@ -123,23 +136,30 @@ export const verifyOTP = async (otp) => {
 
     verifyAttemptCount += 1;
     if (verifyAttemptCount > OTP_VERIFY_LIMIT) {
-      confirmationResult = null;
       lastOtpPhoneNumber = null;
       throw new Error("Too many failed attempts. Please request a new OTP.");
     }
 
-    // Confirm OTP with Firebase
-    const result = await confirmationResult.confirm(code);
-    const user = result.user;
+    // Verify OTP with Supabase
+    const { data, error } = await supabase.auth.verifyOtp({
+      phone: sendOTPphone(formattedNumber),
+      token: code,
+      type: "sms",
+    });
 
-    // Create Firestore user doc if this is first login.
-    // Uses setDoc with merge: true internally so it won't
-    // overwrite existing user data for returning users.
-    await createUser(user.uid, user.phoneNumber);
+    if (error) {
+      throw error;
+    }
+
+    const user = data.user;
+
+    // Create user profile if this is first login.
+    // Uses upsert so it won't overwrite existing user data for returning users.
+    await createUser(user.id, user.phone);
     clearRateLimit(`otp-cooldown:${lastOtpPhoneNumber}`);
     verifyAttemptCount = 0;
 
-    console.log("OTP verified successfully for user:", user.uid);
+    console.log("OTP verified successfully for user:", user.id);
     return {
       success: true,
       user,
@@ -158,18 +178,29 @@ export const verifyOTP = async (otp) => {
 |--------------------------------------------------------------------------
 | signOut()
 |--------------------------------------------------------------------------
-| Logs the current user out of Firebase authentication.
+| Logs the current user out of Supabase authentication.
 |
 | Steps:
-| 1. Call Firebase signOut
-| 2. Clear confirmation result
+| 1. Call Supabase signOut
+| 2. Clear stored state
 */
 export const signOut = async () => {
   try {
-    await firebaseSignOut(auth);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    // Clear stored confirmation result
-    confirmationResult = null;
+    if (user?.id) {
+      await unregisterPushTokenForUser(user.id);
+    }
+
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      throw error;
+    }
+
+    // Clear stored state
     lastOtpPhoneNumber = null;
     verifyAttemptCount = 0;
 
@@ -189,12 +220,21 @@ export const signOut = async () => {
 |--------------------------------------------------------------------------
 | getCurrentUser()
 |--------------------------------------------------------------------------
-| Returns currently authenticated Firebase user.
+| Returns currently authenticated Supabase user.
 | If user is not logged in, returns null.
 */
-export const getCurrentUser = () => {
+export const getCurrentUser = async () => {
   try {
-    return getAuth().currentUser || null;
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error) {
+      throw error;
+    }
+
+    return user || null;
   } catch (error) {
     console.error("Get current user error:", error);
     return null;
@@ -205,15 +245,23 @@ export const getCurrentUser = () => {
 |--------------------------------------------------------------------------
 | onAuthStateChanged(callback)
 |--------------------------------------------------------------------------
-| Wrapper for Firebase auth listener.
+| Wrapper for Supabase auth listener.
 |
 | Allows app to listen for login/logout events.
 | Returns unsubscribe function for cleanup.
 */
 export const onAuthStateChanged = (callback) => {
   try {
-    const unsubscribe = firebaseOnAuthStateChanged(auth, callback);
-    return unsubscribe;
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      callback(session?.user || null);
+    });
+
+    // Return unsubscribe function
+    return () => {
+      subscription.unsubscribe();
+    };
   } catch (error) {
     console.error("Auth state listener error:", error);
     return () => {};

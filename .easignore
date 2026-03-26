@@ -1,0 +1,15 @@
+.git
+.gitignore
+.expo
+node_modules
+dist
+web-build
+.vscode
+.tmp_stitch
+coverage
+*.log
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+.env
+.env*.local

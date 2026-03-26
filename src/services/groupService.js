@@ -1,21 +1,20 @@
-import {
-  arrayRemove,
-  arrayUnion,
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  query,
-  serverTimestamp,
-  setDoc,
-  updateDoc,
-  where,
-} from "firebase/firestore";
-
-import { db } from "../config/firebaseConfig";
+import { supabase } from "../config/supabaseConfig";
+import { createNotificationsForUsers } from "./notificationService";
 import { enforceCooldown } from "../utils/rateLimit";
 
 const CREATE_GROUP_COOLDOWN_MS = 3 * 1000;
+const GROUPS_TABLE = "groups";
+
+const getGroupServiceErrorMessage = (
+  error,
+  fallback = "Group service request failed.",
+) => {
+  if (error?.code === "PGRST205") {
+    return "The Supabase 'groups' table is missing. Create public.groups and refresh the schema cache.";
+  }
+
+  return error?.message || fallback;
+};
 
 const sanitizeGroupName = (name) => {
   const cleaned = String(name || "")
@@ -33,14 +32,21 @@ const sanitizeGroupName = (name) => {
   return cleaned;
 };
 
+const sortGroupsByActivity = (items = []) =>
+  [...items].sort((a, b) => {
+    const aTime = new Date(a?.lastActivity || a?.createdAt || 0).getTime();
+    const bTime = new Date(b?.lastActivity || b?.createdAt || 0).getTime();
+    return bTime - aTime;
+  });
+
 /*
 |--------------------------------------------------------------------------
 | createGroup(name, emoji, memberIds, createdBy)
 |--------------------------------------------------------------------------
-| Creates a new group document in Firestore.
+| Creates a new group document in Supabase.
 |
 | Structure:
-| groups/{groupId}
+| groups table
 | {
 |   id,
 |   name,
@@ -55,47 +61,75 @@ const sanitizeGroupName = (name) => {
 | We intentionally keep the group document as the source of truth
 | for membership. Updating other users' documents from the client
 | would require cross-user write permissions and is blocked by
-| safer Firestore rules.
+| safer Supabase RLS policies.
 */
-export const createGroup = async (name, emoji, memberIds, createdBy) => {
+export const createGroup = async (
+  name,
+  emoji,
+  memberIds,
+  createdBy,
+  actorName = "Someone",
+) => {
   try {
-    const uniqueMemberIds = [...new Set([...(memberIds || []), createdBy].filter(Boolean))];
+    const uniqueMemberIds = [
+      ...new Set([...(memberIds || []), createdBy].filter(Boolean)),
+    ];
     if (uniqueMemberIds.length === 0 || uniqueMemberIds.length > 25) {
       throw new Error("Groups must have between 1 and 25 members.");
     }
 
     sanitizeGroupName(name);
 
-    const cooldown = enforceCooldown(`create-group:${createdBy}`, CREATE_GROUP_COOLDOWN_MS);
+    const cooldown = enforceCooldown(
+      `create-group:${createdBy}`,
+      CREATE_GROUP_COOLDOWN_MS,
+    );
     if (!cooldown.allowed) {
       throw new Error("Please wait a moment before creating another group.");
     }
 
-    const groupRef = doc(collection(db, "groups"));
-    const groupId = groupRef.id;
-
     const groupData = {
-      id: groupId,
       name: sanitizeGroupName(name),
       emoji: String(emoji || "👥").slice(0, 2),
       members: uniqueMemberIds,
       createdBy,
-      createdAt: serverTimestamp(),
-      lastActivity: serverTimestamp(),
+      createdAt: new Date().toISOString(),
+      lastActivity: new Date().toISOString(),
     };
 
-    await setDoc(groupRef, groupData);
+    const { data, error } = await supabase
+      .from(GROUPS_TABLE)
+      .insert(groupData)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    await createNotificationsForUsers(
+      uniqueMemberIds,
+      {
+        type: "group_created",
+        title: "New group created",
+        message: `${actorName} created ${groupData.name}.`,
+        groupId: data.id,
+        metadata: {
+          emoji: groupData.emoji,
+          groupName: groupData.name,
+        },
+      },
+      createdBy,
+    );
 
     return {
       success: true,
-      groupId,
+      groupId: data.id,
     };
   } catch (error) {
     console.error("Create group error:", error);
 
     return {
       success: false,
-      error: error.message || "Failed to create group",
+      error: getGroupServiceErrorMessage(error, "Failed to create group"),
     };
   }
 };
@@ -108,26 +142,32 @@ export const createGroup = async (name, emoji, memberIds, createdBy) => {
 */
 export const getGroup = async (groupId) => {
   try {
-    const groupRef = doc(db, "groups", groupId);
-    const snapshot = await getDoc(groupRef);
+    const { data, error } = await supabase
+      .from(GROUPS_TABLE)
+      .select("*")
+      .eq("id", groupId)
+      .single();
 
-    if (!snapshot.exists()) {
-      return {
-        success: false,
-        error: "Group not found",
-      };
+    if (error) {
+      if (error.code === "PGRST116") {
+        return {
+          success: false,
+          error: "Group not found",
+        };
+      }
+      throw error;
     }
 
     return {
       success: true,
-      group: snapshot.data(),
+      group: data,
     };
   } catch (error) {
     console.error("Get group error:", error);
 
     return {
       success: false,
-      error: error.message || "Failed to fetch group",
+      error: getGroupServiceErrorMessage(error, "Failed to fetch group"),
     };
   }
 };
@@ -138,7 +178,7 @@ export const getGroup = async (groupId) => {
 |--------------------------------------------------------------------------
 | Real-time listener for groups where the user is a member.
 |
-| Firestore query:
+| Supabase query:
 | groups where members array contains userId
 |
 | onUpdate(groups) will be called whenever group data changes.
@@ -147,21 +187,57 @@ export const getGroup = async (groupId) => {
 */
 export const getUserGroups = (userId, onUpdate) => {
   try {
-    const groupsRef = collection(db, "groups");
+    const channel = supabase
+      .channel(`user-groups-${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "groups",
+          filter: `members@>${JSON.stringify([userId])}`, // PostgreSQL array contains
+        },
+        () => {
+          // Re-fetch all groups for the user when there's a change
+          supabase
+            .from(GROUPS_TABLE)
+            .select("*")
+            .contains("members", [userId])
+            .then(({ data, error }) => {
+              if (error) {
+                console.error(
+                  "Error fetching user groups:",
+                  getGroupServiceErrorMessage(error),
+                  error,
+                );
+                return;
+              }
+              onUpdate(sortGroupsByActivity(data || []));
+            });
+        },
+      )
+      .subscribe();
 
-    const q = query(groupsRef, where("members", "array-contains", userId));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const groups = [];
-
-      snapshot.forEach((doc) => {
-        groups.push(doc.data());
+    // Initial fetch
+    supabase
+      .from(GROUPS_TABLE)
+      .select("*")
+      .contains("members", [userId])
+      .then(({ data, error }) => {
+        if (error) {
+          console.error(
+            "Error fetching user groups:",
+            getGroupServiceErrorMessage(error),
+            error,
+          );
+          return;
+        }
+        onUpdate(sortGroupsByActivity(data || []));
       });
 
-      onUpdate(groups);
-    });
-
-    return unsubscribe;
+    return () => {
+      supabase.removeChannel(channel);
+    };
   } catch (error) {
     console.error("Group listener error:", error);
 
@@ -179,20 +255,74 @@ export const getUserGroups = (userId, onUpdate) => {
 | 1. Add userId to group members array
 | 2. Add groupId to user's groups array
 |
-| Uses Firestore arrayUnion to prevent duplicates.
+| Uses array operations to prevent duplicates.
 */
-export const addMemberToGroup = async (groupId, userId) => {
+export const addMemberToGroup = async (
+  groupId,
+  userId,
+  actorId,
+  actorName = "Someone",
+) => {
   try {
     if (!groupId || !userId) {
       throw new Error("Group ID and user ID are required.");
     }
 
-    const groupRef = doc(db, "groups", groupId);
+    // Get current group
+    const { data: group, error: fetchError } = await supabase
+      .from(GROUPS_TABLE)
+      .select("name, members")
+      .eq("id", groupId)
+      .single();
 
-    await updateDoc(groupRef, {
-      members: arrayUnion(userId),
-      lastActivity: serverTimestamp(),
-    });
+    if (fetchError) throw fetchError;
+
+    const currentMembers = group.members || [];
+    if (currentMembers.includes(userId)) {
+      return { success: true }; // Already a member
+    }
+
+    const updatedMembers = [...currentMembers, userId];
+
+    const { error } = await supabase
+      .from(GROUPS_TABLE)
+      .update({
+        members: updatedMembers,
+        lastActivity: new Date().toISOString(),
+      })
+      .eq("id", groupId);
+
+    if (error) throw error;
+
+    await createNotificationsForUsers(
+      [userId],
+      {
+        type: "group_member_added",
+        title: "Added to a group",
+        message: `${actorName} added you to ${group.name || "a group"}.`,
+        groupId,
+        metadata: {
+          groupName: group.name || "",
+          memberId: userId,
+        },
+      },
+      actorId || userId,
+    );
+
+    await createNotificationsForUsers(
+      updatedMembers.filter((memberId) => memberId !== userId),
+      {
+        type: "group_member_joined",
+        title: "Group updated",
+        message: `${actorName} added a new member to ${group.name || "your group"}.`,
+        groupId,
+        metadata: {
+          groupName: group.name || "",
+          memberId: userId,
+        },
+      },
+      actorId || userId,
+    );
 
     return { success: true };
   } catch (error) {
@@ -200,7 +330,32 @@ export const addMemberToGroup = async (groupId, userId) => {
 
     return {
       success: false,
-      error: error.message || "Failed to add member to group",
+      error: getGroupServiceErrorMessage(
+        error,
+        "Failed to add member to group",
+      ),
+    };
+  }
+};
+
+export const getUserGroupsOnce = async (userId) => {
+  try {
+    const { data, error } = await supabase
+      .from(GROUPS_TABLE)
+      .select("*")
+      .contains("members", [userId]);
+
+    if (error) throw error;
+
+    return {
+      success: true,
+      groups: sortGroupsByActivity(data || []),
+    };
+  } catch (error) {
+    console.error("Get user groups once error:", error);
+    return {
+      success: false,
+      error: getGroupServiceErrorMessage(error, "Failed to fetch groups"),
     };
   }
 };
@@ -219,11 +374,14 @@ export const addMemberToGroup = async (groupId, userId) => {
 */
 export const updateGroupActivity = async (groupId) => {
   try {
-    const groupRef = doc(db, "groups", groupId);
+    const { error } = await supabase
+      .from(GROUPS_TABLE)
+      .update({
+        lastActivity: new Date().toISOString(),
+      })
+      .eq("id", groupId);
 
-    await updateDoc(groupRef, {
-      lastActivity: serverTimestamp(),
-    });
+    if (error) throw error;
 
     return { success: true };
   } catch (error) {
@@ -231,23 +389,76 @@ export const updateGroupActivity = async (groupId) => {
 
     return {
       success: false,
-      error: error.message || "Failed to update group activity",
+      error: getGroupServiceErrorMessage(
+        error,
+        "Failed to update group activity",
+      ),
     };
   }
 };
 
-export const removeMemberFromGroup = async (groupId, userId) => {
+export const removeMemberFromGroup = async (
+  groupId,
+  userId,
+  actorId,
+  actorName = "Someone",
+) => {
   try {
     if (!groupId || !userId) {
       throw new Error("Group ID and user ID are required.");
     }
 
-    const groupRef = doc(db, "groups", groupId);
+    // Get current group
+    const { data: group, error: fetchError } = await supabase
+      .from(GROUPS_TABLE)
+      .select("name, members")
+      .eq("id", groupId)
+      .single();
 
-    await updateDoc(groupRef, {
-      members: arrayRemove(userId),
-      lastActivity: serverTimestamp(),
-    });
+    if (fetchError) throw fetchError;
+
+    const currentMembers = group.members || [];
+    const updatedMembers = currentMembers.filter((id) => id !== userId);
+
+    const { error } = await supabase
+      .from(GROUPS_TABLE)
+      .update({
+        members: updatedMembers,
+        lastActivity: new Date().toISOString(),
+      })
+      .eq("id", groupId);
+
+    if (error) throw error;
+
+    await createNotificationsForUsers(
+      [userId],
+      {
+        type: "group_member_removed",
+        title: "Removed from group",
+        message: `${actorName} removed you from ${group.name || "a group"}.`,
+        groupId,
+        metadata: {
+          groupName: group.name || "",
+          memberId: userId,
+        },
+      },
+      actorId || userId,
+    );
+
+    await createNotificationsForUsers(
+      updatedMembers,
+      {
+        type: "group_member_left",
+        title: "Group updated",
+        message: `${actorName} removed a member from ${group.name || "your group"}.`,
+        groupId,
+        metadata: {
+          groupName: group.name || "",
+          memberId: userId,
+        },
+      },
+      actorId || userId,
+    );
 
     return { success: true };
   } catch (error) {
@@ -255,7 +466,10 @@ export const removeMemberFromGroup = async (groupId, userId) => {
 
     return {
       success: false,
-      error: error.message || "Failed to remove member from group",
+      error: getGroupServiceErrorMessage(
+        error,
+        "Failed to remove member from group",
+      ),
     };
   }
 };

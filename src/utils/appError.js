@@ -1,7 +1,10 @@
 const includesAny = (value, patterns) =>
   patterns.some((pattern) => value.includes(pattern));
 
-export const getReadableError = (error, fallbackMessage = "Something went wrong. Please try again.") => {
+export const getReadableError = (
+  error,
+  fallbackMessage = "Something went wrong. Please try again.",
+) => {
   const code = String(error?.code || "").toLowerCase();
   const message = String(error?.message || "").toLowerCase();
   const combined = `${code} ${message}`;
@@ -30,7 +33,8 @@ export const getReadableError = (error, fallbackMessage = "Something went wrong.
   ) {
     return {
       title: "Access denied",
-      message: "This action is not allowed right now. Check your Firebase rules or sign-in state.",
+      message:
+        "This action is not allowed right now. Check your Supabase RLS policies or sign-in state.",
       variant: "error",
     };
   }
@@ -45,7 +49,8 @@ export const getReadableError = (error, fallbackMessage = "Something went wrong.
   ) {
     return {
       title: "Upload failed",
-      message: "Image upload could not finish. Check your Cloudinary config, preset, and network connection.",
+      message:
+        "Image upload could not finish. Check your Cloudinary config, preset, and network connection.",
       variant: "error",
     };
   }

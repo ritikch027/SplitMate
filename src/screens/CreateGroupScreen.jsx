@@ -67,7 +67,13 @@ export default function CreateGroupScreen({ navigation }) {
       }
 
       const memberIds = [...new Set([user.uid, ...lookup.users.map((item) => item.id)])];
-      const result = await createGroup(name.trim(), emoji, memberIds, user.uid);
+      const result = await createGroup(
+        name.trim(),
+        emoji,
+        memberIds,
+        user.uid,
+        userProfile?.name || userProfile?.phone || "Someone",
+      );
 
       if (!result.success) {
         showAlert({

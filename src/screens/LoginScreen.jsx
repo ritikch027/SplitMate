@@ -1,6 +1,5 @@
-import { FirebaseRecaptchaVerifierModal } from "expo-firebase-recaptcha";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useRef, useState } from "react";
+import React, { useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -13,12 +12,11 @@ import {
   View,
 } from "react-native";
 
-import Animated, { FadeInDown } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
+import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
-import { firebaseConfig } from "../config/firebaseConfig";
 import { colors, fontSize, spacing } from "../constants/theme";
 import { sendOTP } from "../services/authService";
 
@@ -27,9 +25,6 @@ export default function LoginScreen({ navigation }) {
   const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
-  const recaptchaRef = useRef(null);
-
   const validatePhone = () => {
     if (!/^[0-9]{10}$/.test(phone)) {
       setError("Enter a valid 10-digit phone number");
@@ -46,7 +41,7 @@ export default function LoginScreen({ navigation }) {
     try {
       setLoading(true);
       const fullPhone = `+91${phone}`;
-      const result = await sendOTP(fullPhone, recaptchaRef.current);
+      const result = await sendOTP(fullPhone);
 
       if (result.success) {
         navigation.navigate("OTPScreen", { phone: fullPhone });
@@ -74,20 +69,21 @@ export default function LoginScreen({ navigation }) {
       <View style={styles.glowTop} pointerEvents="none" />
       <View style={styles.glowBottom} pointerEvents="none" />
 
-      <FirebaseRecaptchaVerifierModal
-        ref={recaptchaRef}
-        firebaseConfig={firebaseConfig}
-      />
-
       <Animated.View entering={FadeInDown.springify()} style={styles.header}>
-        <LinearGradient colors={[colors.accent, colors.cyan]} style={styles.logoWrap}>
+        <LinearGradient
+          colors={[colors.accent, colors.cyan]}
+          style={styles.logoWrap}
+        >
           <Ionicons name="git-branch-outline" size={30} color="#fff" />
         </LinearGradient>
         <Text style={styles.logo}>SplitMate</Text>
         <Text style={styles.tagline}>Splitting bills made effortless.</Text>
       </Animated.View>
 
-      <Animated.View entering={FadeInDown.delay(120).springify()} style={styles.card}>
+      <Animated.View
+        entering={FadeInDown.delay(120).springify()}
+        style={styles.card}
+      >
         <Text style={styles.label}>Phone Number</Text>
         <View style={styles.inputWrap}>
           <Text style={styles.prefix}>+91</Text>
@@ -111,7 +107,10 @@ export default function LoginScreen({ navigation }) {
           onPress={handleContinue}
           disabled={loading}
         >
-          <LinearGradient colors={[colors.accent, colors.cyan]} style={styles.button}>
+          <LinearGradient
+            colors={[colors.accent, colors.cyan]}
+            style={styles.button}
+          >
             {loading ? (
               <ActivityIndicator color="#fff" />
             ) : (

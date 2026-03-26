@@ -1,4 +1,3 @@
-import { FirebaseRecaptchaVerifierModal } from "expo-firebase-recaptcha";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -21,7 +20,6 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
-import { firebaseConfig } from "../config/firebaseConfig";
 import { colors, fontSize, spacing } from "../constants/theme";
 import { sendOTP, verifyOTP } from "../services/authService";
 
@@ -36,10 +34,9 @@ export default function OTPScreen({ navigation, route }) {
   const [statusText, setStatusText] = useState("");
 
   const inputs = useRef([]);
-  const recaptchaRef = useRef(null);
   const shake = useSharedValue(0);
 
-  const maskedPhone = `${phone.slice(0, 3)} ••• ••• ${phone.slice(phone.length - 4)}`;
+  const maskedPhone = `${phone.slice(0, 2)} •••• ${phone.slice(phone.length - 4)}`;
 
   /*──────────────────────────────────────────────────────────────
     Countdown timer
@@ -104,7 +101,7 @@ export default function OTPScreen({ navigation, route }) {
       setError("");
       setStatusText("");
 
-      const result = await verifyOTP(code);
+      const result = await verifyOTP(phone, code);
 
       if (!result.success) {
         setError(result.error || "Invalid OTP");
@@ -112,8 +109,7 @@ export default function OTPScreen({ navigation, route }) {
         return;
       }
 
-      setStatusText("Verified. Taking you inside...");
-      navigation.replace("CompleteProfileScreen");
+      setStatusText("Verified. Preparing your account...");
     } catch {
       setError("Invalid OTP");
       triggerShake();
@@ -129,7 +125,7 @@ export default function OTPScreen({ navigation, route }) {
     if (timer > 0) return;
 
     setError("");
-    const result = await sendOTP(phone, recaptchaRef.current);
+    const result = await sendOTP(phone);
 
     if (!result.success) {
       setError(result.error || "Failed to resend OTP");
@@ -154,11 +150,6 @@ export default function OTPScreen({ navigation, route }) {
     >
       <StatusBar barStyle="light-content" />
       <AnimatedBackdrop />
-
-      <FirebaseRecaptchaVerifierModal
-        ref={recaptchaRef}
-        firebaseConfig={firebaseConfig}
-      />
 
       {/* ── Header ── */}
       <Animated.View entering={FadeInDown.springify()} style={styles.header}>
