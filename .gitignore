@@ -37,12 +37,21 @@ yarn-error.*
 .tmp_stitch/
 TODO.md
 *.log
+.gradle-local/
 
 # typescript
 *.tsbuildinfo
 
 app-example
 
-# generated native folders
-/ios
-/android
+# Android generated files
+android/.gradle/
+android/build/
+android/app/build/
+android/app/.cxx/
+android/.kotlin/
+
+# iOS generated files
+ios/build/
+ios/Pods/
+ios/.symlinks/
