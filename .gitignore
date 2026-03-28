@@ -56,3 +56,7 @@ android/.kotlin/
 ios/build/
 ios/Pods/
 ios/.symlinks/
+
+# Firebase config files
+android/app/google-services.json
+ios/GoogleService-Info.plist
