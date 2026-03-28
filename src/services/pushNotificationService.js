@@ -3,10 +3,12 @@ import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
+import { navigationRef } from "../navigation/navigationRef";
 import { supabase } from "../config/supabaseConfig";
+import { navigateFromRootNotification } from "../utils/notificationRouting";
 
-const PUSH_TOKENS_TABLE = "push_tokens";
 const PUSH_TOKEN_CACHE_KEY = "splitmate:expo-push-token";
+let lastHandledNotificationId = null;
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -22,10 +24,41 @@ const getPushServiceErrorMessage = (
   fallback = "Push notification request failed.",
 ) => error?.message || fallback;
 
+const getFunctionErrorDetails = async (error) => {
+  if (!error?.context) {
+    return null;
+  }
+
+  try {
+    return await error.context.json();
+  } catch (_jsonError) {
+    try {
+      const text = await error.context.text();
+      return { error: text };
+    } catch (_textError) {
+      return null;
+    }
+  }
+};
+
 const getProjectId = () =>
   Constants?.expoConfig?.extra?.eas?.projectId ??
   Constants?.easConfig?.projectId ??
   process.env.EXPO_PUBLIC_EAS_PROJECT_ID;
+
+const getNotificationResponseData = (response) =>
+  response?.notification?.request?.content?.data || {};
+
+const handleNotificationResponse = (response) => {
+  const notificationId = response?.notification?.request?.identifier;
+
+  if (notificationId && notificationId === lastHandledNotificationId) {
+    return;
+  }
+
+  lastHandledNotificationId = notificationId || null;
+  navigateFromRootNotification(navigationRef, getNotificationResponseData(response));
+};
 
 export const registerPushTokenForUser = async (
   userId,
@@ -37,17 +70,11 @@ export const registerPushTokenForUser = async (
       return { success: false, error: "User ID and push token are required." };
     }
 
-    const payload = {
-      userId,
-      token: expoPushToken,
-      platform: Platform.OS,
-      deviceName,
-      updatedAt: new Date().toISOString(),
-    };
-
-    const { error } = await supabase
-      .from(PUSH_TOKENS_TABLE)
-      .upsert(payload, { onConflict: "token" });
+    const { error } = await supabase.rpc("claim_push_token", {
+      p_token: expoPushToken,
+      p_platform: Platform.OS,
+      p_device_name: deviceName,
+    });
 
     if (error) throw error;
 
@@ -58,10 +85,7 @@ export const registerPushTokenForUser = async (
     console.error("Register push token error:", error);
     return {
       success: false,
-      error: getPushServiceErrorMessage(
-        error,
-        "Failed to register push token",
-      ),
+      error: getPushServiceErrorMessage(error, "Failed to register push token"),
     };
   }
 };
@@ -73,11 +97,9 @@ export const unregisterPushTokenForUser = async (userId) => {
       return { success: true };
     }
 
-    const { error } = await supabase
-      .from(PUSH_TOKENS_TABLE)
-      .delete()
-      .eq("userId", userId)
-      .eq("token", cachedToken);
+    const { error } = await supabase.rpc("release_push_token", {
+      p_token: cachedToken,
+    });
 
     if (error) throw error;
 
@@ -183,13 +205,36 @@ export const sendPushNotificationsToUsers = async (
 
     return { success: true, count: recipients.length };
   } catch (error) {
-    console.error("Send push notifications error:", error);
+    const details = await getFunctionErrorDetails(error);
+    console.error("Send push notifications error:", error, details);
     return {
       success: false,
-      error: getPushServiceErrorMessage(
-        error,
-        "Failed to send push notifications",
-      ),
+      error:
+        details?.error ||
+        getPushServiceErrorMessage(
+          error,
+          "Failed to send push notifications",
+        ),
     };
   }
+};
+
+export const setupPushNotificationNavigation = () => {
+  Notifications.getLastNotificationResponseAsync()
+    .then((response) => {
+      if (response) {
+        handleNotificationResponse(response);
+      }
+    })
+    .catch((error) => {
+      console.warn("Unable to restore last notification response:", error);
+    });
+
+  const subscription = Notifications.addNotificationResponseReceivedListener(
+    handleNotificationResponse,
+  );
+
+  return () => {
+    subscription.remove();
+  };
 };

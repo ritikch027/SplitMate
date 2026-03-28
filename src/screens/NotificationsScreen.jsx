@@ -21,6 +21,7 @@ import {
   markAllNotificationsAsRead,
   markNotificationAsRead,
 } from "../services/notificationService";
+import { navigateToNotificationTarget } from "../utils/notificationRouting";
 
 const NOTIFICATION_ICON = {
   expense_added: "receipt-outline",
@@ -106,12 +107,7 @@ export default function NotificationsScreen({ navigation }) {
       await markNotificationAsRead(notification.id);
     }
 
-    if (notification.groupId) {
-      navigation.navigate("GroupDetailsScreen", { groupId: notification.groupId });
-      return;
-    }
-
-    navigation.navigate("Activity");
+    navigateToNotificationTarget(navigation, notification);
   };
 
   const handleMarkAllRead = async () => {

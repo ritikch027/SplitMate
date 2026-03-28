@@ -17,6 +17,16 @@ const getExpenseServiceErrorMessage = (
   return error?.message || fallback;
 };
 
+const formatCurrency = (amount) => `Rs ${Number(amount || 0).toFixed(2)}`;
+
+const buildExpenseNotificationMessage = (
+  actorName,
+  amount,
+  reason,
+  action = "added",
+) =>
+  `${actorName || "Someone"} ${action} ${formatCurrency(amount)} for ${reason || "an expense"}.`;
+
 /*
 |--------------------------------------------------------------------------
 | sanitizeExpensePayload
@@ -110,8 +120,13 @@ export const addExpense = async (groupId, expenseData) => {
       sanitizedExpense.splitBetween,
       {
         type: "expense_added",
-        title: "New expense added",
-        message: `${expense.createdByName || "Someone"} added ${expense.description} in ${expense.groupName || "your group"}.`,
+        title: expense.groupName || "New expense added",
+        message: buildExpenseNotificationMessage(
+          expense.createdByName,
+          expense.amount,
+          expense.description,
+          "added",
+        ),
         groupId,
         expenseId: data.id,
         metadata: {
@@ -119,6 +134,8 @@ export const addExpense = async (groupId, expenseData) => {
           category: expense.category,
           description: expense.description,
           groupName: expense.groupName || "",
+          actorName: expense.createdByName || "Someone",
+          reason: expense.description,
         },
       },
       actorId,
@@ -427,8 +444,18 @@ export const updateExpense = async (
       affectedUserIds,
       {
         type: "expense_updated",
-        title: "Expense updated",
-        message: `${sanitizedExpense.createdByName || existingExpense.createdByName || "Someone"} updated ${sanitizedExpense.description} in ${sanitizedExpense.groupName || existingExpense.groupName || "your group"}.`,
+        title:
+          sanitizedExpense.groupName ||
+          existingExpense.groupName ||
+          "Expense updated",
+        message: buildExpenseNotificationMessage(
+          sanitizedExpense.createdByName ||
+            existingExpense.createdByName ||
+            "Someone",
+          sanitizedExpense.amount,
+          sanitizedExpense.description,
+          "updated",
+        ),
         groupId,
         expenseId,
         metadata: {
@@ -437,6 +464,11 @@ export const updateExpense = async (
           description: sanitizedExpense.description,
           groupName:
             sanitizedExpense.groupName || existingExpense.groupName || "",
+          actorName:
+            sanitizedExpense.createdByName ||
+            existingExpense.createdByName ||
+            "Someone",
+          reason: sanitizedExpense.description,
         },
       },
       actorId,
@@ -491,8 +523,13 @@ export const deleteExpenseByActor = async (expenseId, actorId) => {
       expense.splitBetween || [],
       {
         type: "expense_deleted",
-        title: "Expense removed",
-        message: `${expense.createdByName || "Someone"} removed ${expense.description} from ${expense.groupName || "your group"}.`,
+        title: expense.groupName || "Expense removed",
+        message: buildExpenseNotificationMessage(
+          expense.createdByName,
+          expense.amount,
+          expense.description,
+          "removed",
+        ),
         groupId: expense.groupId,
         expenseId,
         metadata: {
@@ -500,6 +537,8 @@ export const deleteExpenseByActor = async (expenseId, actorId) => {
           category: expense.category,
           description: expense.description,
           groupName: expense.groupName || "",
+          actorName: expense.createdByName || "Someone",
+          reason: expense.description,
         },
       },
       actorId,

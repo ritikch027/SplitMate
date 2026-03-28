@@ -39,6 +39,9 @@ const sortGroupsByActivity = (items = []) =>
     return bTime - aTime;
   });
 
+const buildGroupNotificationMessage = (actorName, groupName, action) =>
+  `${actorName || "Someone"} ${action} ${groupName || "this group"}.`;
+
 /*
 |--------------------------------------------------------------------------
 | createGroup(name, emoji, memberIds, createdBy)
@@ -109,12 +112,18 @@ export const createGroup = async (
       uniqueMemberIds,
       {
         type: "group_created",
-        title: "New group created",
-        message: `${actorName} created ${groupData.name}.`,
+        title: groupData.name,
+        message: buildGroupNotificationMessage(
+          actorName,
+          groupData.name,
+          "created",
+        ),
         groupId: data.id,
         metadata: {
           emoji: groupData.emoji,
           groupName: groupData.name,
+          actorName,
+          reason: "Group created",
         },
       },
       createdBy,
@@ -299,11 +308,17 @@ export const addMemberToGroup = async (
       {
         type: "group_member_added",
         title: "Added to a group",
-        message: `${actorName} added you to ${group.name || "a group"}.`,
+        message: buildGroupNotificationMessage(
+          actorName,
+          group.name || "a group",
+          "added you to",
+        ),
         groupId,
         metadata: {
           groupName: group.name || "",
           memberId: userId,
+          actorName,
+          reason: "Member added",
         },
       },
       actorId || userId,
@@ -314,11 +329,17 @@ export const addMemberToGroup = async (
       {
         type: "group_member_joined",
         title: "Group updated",
-        message: `${actorName} added a new member to ${group.name || "your group"}.`,
+        message: buildGroupNotificationMessage(
+          actorName,
+          group.name || "your group",
+          "added a new member to",
+        ),
         groupId,
         metadata: {
           groupName: group.name || "",
           memberId: userId,
+          actorName,
+          reason: "Member joined",
         },
       },
       actorId || userId,
@@ -435,11 +456,17 @@ export const removeMemberFromGroup = async (
       {
         type: "group_member_removed",
         title: "Removed from group",
-        message: `${actorName} removed you from ${group.name || "a group"}.`,
+        message: buildGroupNotificationMessage(
+          actorName,
+          group.name || "a group",
+          "removed you from",
+        ),
         groupId,
         metadata: {
           groupName: group.name || "",
           memberId: userId,
+          actorName,
+          reason: "Member removed",
         },
       },
       actorId || userId,
@@ -450,11 +477,17 @@ export const removeMemberFromGroup = async (
       {
         type: "group_member_left",
         title: "Group updated",
-        message: `${actorName} removed a member from ${group.name || "your group"}.`,
+        message: buildGroupNotificationMessage(
+          actorName,
+          group.name || "your group",
+          "removed a member from",
+        ),
         groupId,
         metadata: {
           groupName: group.name || "",
           memberId: userId,
+          actorName,
+          reason: "Member left",
         },
       },
       actorId || userId,

@@ -1,11 +1,10 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { StyleSheet } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../context/useAuth";
-import { getUserNotifications } from "../services/notificationService";
 
 /* Screens */
 import ActivityScreen from "../screens/ActivityScreen";
@@ -80,19 +79,6 @@ const HomeTab = () => (
   Bottom tab bar shown to logged-in users
 ──────────────────────────────────────────────────────────────*/
 const MainTabs = () => {
-  const { user } = useAuth();
-  const [unreadCount, setUnreadCount] = useState(0);
-
-  useEffect(() => {
-    if (!user) return undefined;
-
-    const unsubscribe = getUserNotifications(user.uid, (notifications) => {
-      setUnreadCount(notifications.filter((item) => !item.read).length);
-    });
-
-    return unsubscribe;
-  }, [user]);
-
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -132,7 +118,6 @@ const MainTabs = () => {
         component={ProfileScreen}
         options={{
           tabBarLabel: "Profile",
-          tabBarBadge: unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : undefined,
         }}
       />
     </Tab.Navigator>

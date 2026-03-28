@@ -24,38 +24,30 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return jsonResponse({ error: "Unauthorized" }, 401);
-    }
-
     const { userIds, notification } = await req.json();
 
     if (!Array.isArray(userIds) || userIds.length === 0) {
-      return jsonResponse({ error: "userIds is required." }, 400);
-    }
-
-    if (!notification?.title || !notification?.body) {
       return jsonResponse(
-        { error: "notification.title and notification.body are required." },
+        { error: "userIds is required.", code: "missing_user_ids" },
         400,
       );
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL");
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-    if (!supabaseUrl || !serviceRoleKey) {
+    if (!notification?.title || !notification?.body) {
       return jsonResponse(
         {
-          error:
-            "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY function secret.",
+          error: "notification.title and notification.body are required.",
+          code: "invalid_notification_payload",
         },
-        500,
+        400,
       );
     }
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey);
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL"),
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"),
+    );
+
     const uniqueUserIds = [...new Set(userIds.filter(Boolean))];
 
     const { data: tokens, error: tokenError } = await supabase
@@ -63,9 +55,7 @@ Deno.serve(async (req) => {
       .select("token")
       .in("userId", uniqueUserIds);
 
-    if (tokenError) {
-      throw tokenError;
-    }
+    if (tokenError) throw tokenError;
 
     const uniqueTokens = [
       ...new Set((tokens || []).map((item) => item.token).filter(Boolean)),
@@ -75,7 +65,7 @@ Deno.serve(async (req) => {
       return jsonResponse({
         success: true,
         sent: 0,
-        message: "No push tokens found for the requested users.",
+        message: "No push tokens found.",
       });
     }
 
@@ -98,6 +88,7 @@ Deno.serve(async (req) => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${Deno.env.get("EXPO_ACCESS_TOKEN")}`,
         },
         body: JSON.stringify(messages),
       });
@@ -105,12 +96,33 @@ Deno.serve(async (req) => {
       const result = await expoResponse.json();
       results.push(result);
 
+      console.log("Expo response:", JSON.stringify(result, null, 2));
+
+      // 🔥 CLEANUP LOGIC (THIS IS WHAT YOU WANTED)
+      if (result?.data) {
+        for (let i = 0; i < result.data.length; i++) {
+          const item = result.data[i];
+          const token = chunk[i];
+
+          if (item.status === "error") {
+            if (item.details?.error === "DeviceNotRegistered") {
+              console.log("Removing invalid token:", token);
+
+              await supabase.from("push_tokens").delete().eq("token", token);
+            }
+          }
+        }
+      }
+
       if (!expoResponse.ok) {
+        console.error("Expo push failed:", JSON.stringify(result, null, 2));
+
         return jsonResponse(
           {
             success: false,
             sent: totalSent,
             error: "Expo Push API request failed.",
+            code: "expo_push_request_failed",
             result,
           },
           500,
@@ -131,6 +143,7 @@ Deno.serve(async (req) => {
     return jsonResponse(
       {
         error: error instanceof Error ? error.message : "Unknown error",
+        code: "unexpected_error",
       },
       500,
     );

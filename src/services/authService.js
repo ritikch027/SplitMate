@@ -30,19 +30,6 @@ const sendOTPphone = (phoneNum) => {
   return `+${phoneNum}`;
 };
 
-/*
-|--------------------------------------------------------------------------
-| sendOTP(phoneNumber)
-|--------------------------------------------------------------------------
-| Sends OTP to user using Supabase Phone Authentication.
-|
-| Steps:
-| 1. Ensure phone number is formatted to E.164 (+91XXXXXXXXXX)
-| 2. Call Supabase signInWithOtp
-| 3. Return success response
-|
-| Note: No recaptchaVerifier needed - Supabase handles verification automatically
-*/
 export const sendOTP = async (phoneNumber) => {
   try {
     const formattedNumber = normalizePhoneNumber(phoneNumber);
@@ -68,23 +55,17 @@ export const sendOTP = async (phoneNumber) => {
       );
     }
 
-    // Call Supabase phone auth
     const { error } = await supabase.auth.signInWithOtp({
       phone: verifyNum,
     });
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     lastOtpPhoneNumber = verifyNum;
     verifyAttemptCount = 0;
 
-    console.log("OTP sent successfully to", verifyNum);
     return { success: true };
   } catch (error) {
-    console.error("Send OTP Error:", error);
-
     return {
       success: false,
       error: error.message || "Failed to send OTP",
@@ -92,22 +73,8 @@ export const sendOTP = async (phoneNumber) => {
   }
 };
 
-/*
-|--------------------------------------------------------------------------
-| verifyOTP(phoneNumber, otp)
-|--------------------------------------------------------------------------
-| Verifies the OTP entered by the user.
-|
-| Steps:
-| 1. Format phone number
-| 2. Call Supabase verifyOtp
-| 3. Supabase signs user in automatically
-| 4. Create user profile in database (upsert so safe for returning users)
-| 5. Return authenticated user
-*/
 export const verifyOTP = async (phoneNumber, otp) => {
   try {
-    // Backward compatibility: allow older call sites that passed only the OTP.
     if (otp === undefined && /^\d{6}$/.test(String(phoneNumber || "").trim())) {
       otp = phoneNumber;
       phoneNumber = lastOtpPhoneNumber;
@@ -140,33 +107,43 @@ export const verifyOTP = async (phoneNumber, otp) => {
       throw new Error("Too many failed attempts. Please request a new OTP.");
     }
 
-    // Verify OTP with Supabase
     const { data, error } = await supabase.auth.verifyOtp({
       phone: sendOTPphone(formattedNumber),
       token: code,
       type: "sms",
     });
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     const user = data.user;
 
-    // Create user profile if this is first login.
-    // Uses upsert so it won't overwrite existing user data for returning users.
+    // 🔥 CRITICAL FIX: wait for session to be ready
+    let session = null;
+    let attempts = 0;
+
+    while (!session && attempts < 5) {
+      const res = await supabase.auth.getSession();
+      session = res.data.session;
+
+      if (!session) {
+        await new Promise((r) => setTimeout(r, 300));
+        attempts++;
+      }
+    }
+
+    if (!session) {
+      throw new Error("Session not ready after OTP verification");
+    }
+
     await createUser(user.id, user.phone);
     clearRateLimit(`otp-cooldown:${lastOtpPhoneNumber}`);
     verifyAttemptCount = 0;
 
-    console.log("OTP verified successfully for user:", user.id);
     return {
       success: true,
       user,
     };
   } catch (error) {
-    console.error("Verify OTP Error:", error);
-
     return {
       success: false,
       error: error.message || "Invalid OTP",
@@ -174,16 +151,6 @@ export const verifyOTP = async (phoneNumber, otp) => {
   }
 };
 
-/*
-|--------------------------------------------------------------------------
-| signOut()
-|--------------------------------------------------------------------------
-| Logs the current user out of Supabase authentication.
-|
-| Steps:
-| 1. Call Supabase signOut
-| 2. Clear stored state
-*/
 export const signOut = async () => {
   try {
     const {
@@ -195,20 +162,13 @@ export const signOut = async () => {
     }
 
     const { error } = await supabase.auth.signOut();
+    if (error) throw error;
 
-    if (error) {
-      throw error;
-    }
-
-    // Clear stored state
     lastOtpPhoneNumber = null;
     verifyAttemptCount = 0;
 
-    console.log("User signed out successfully");
     return { success: true };
   } catch (error) {
-    console.error("Sign out error:", error);
-
     return {
       success: false,
       error: error.message || "Failed to sign out",
@@ -216,13 +176,6 @@ export const signOut = async () => {
   }
 };
 
-/*
-|--------------------------------------------------------------------------
-| getCurrentUser()
-|--------------------------------------------------------------------------
-| Returns currently authenticated Supabase user.
-| If user is not logged in, returns null.
-*/
 export const getCurrentUser = async () => {
   try {
     const {
@@ -230,40 +183,26 @@ export const getCurrentUser = async () => {
       error,
     } = await supabase.auth.getUser();
 
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     return user || null;
-  } catch (error) {
-    console.error("Get current user error:", error);
+  } catch {
     return null;
   }
 };
 
-/*
-|--------------------------------------------------------------------------
-| onAuthStateChanged(callback)
-|--------------------------------------------------------------------------
-| Wrapper for Supabase auth listener.
-|
-| Allows app to listen for login/logout events.
-| Returns unsubscribe function for cleanup.
-*/
 export const onAuthStateChanged = (callback) => {
   try {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, session) => {
-      callback(session?.user || null);
+      callback(session); // ✅ pass full session (not just user)
     });
 
-    // Return unsubscribe function
     return () => {
       subscription.unsubscribe();
     };
-  } catch (error) {
-    console.error("Auth state listener error:", error);
+  } catch {
     return () => {};
   }
 };
