@@ -11,13 +11,12 @@ import {
   View,
 } from "react-native";
 
-import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
 import ScreenHeader from "../components/ScreenHeader";
-import { fontSize } from "../constants/theme";
+import { buttonTokens, fontSize, surfaces } from "../constants/theme";
 import { useAlert } from "../context/useAlert";
 import { useAuth } from "../context/useAuth";
 import { createGroup } from "../services/groupService";
@@ -160,14 +159,7 @@ export default function CreateGroupScreen({ navigation }) {
 
         <Animated.View entering={FadeInDown.delay(280).springify()}>
           <TouchableOpacity activeOpacity={0.9} onPress={handleCreate} style={styles.button} disabled={loading}>
-            <LinearGradient
-              colors={["#8B5CF6", "#14B8A6"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.buttonGradient}
-            >
               <Text style={styles.buttonText}>{loading ? "Creating..." : "Create Group"}</Text>
-            </LinearGradient>
           </TouchableOpacity>
         </Animated.View>
       </ScrollView>
@@ -178,7 +170,7 @@ export default function CreateGroupScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#020617",
+    backgroundColor: surfaces.screen,
     paddingHorizontal: 20,
   },
   content: {
@@ -186,9 +178,9 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: 12,
-    backgroundColor: "rgba(15,23,42,0.9)",
+    backgroundColor: surfaces.card,
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.14)",
+    borderColor: surfaces.border,
     padding: 16,
     marginBottom: 14,
   },
@@ -207,9 +199,9 @@ const styles = StyleSheet.create({
   input: {
     minHeight: 48,
     borderRadius: 10,
-    backgroundColor: "rgba(2,6,23,0.45)",
+    backgroundColor: surfaces.input,
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.14)",
+    borderColor: surfaces.border,
     color: "#F8FAFC",
     paddingHorizontal: 14,
     fontSize: 15,
@@ -230,9 +222,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(2,6,23,0.45)",
+    backgroundColor: surfaces.input,
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.12)",
+    borderColor: surfaces.border,
   },
   emojiSelected: {
     borderColor: "rgba(139,92,246,0.38)",
@@ -243,18 +235,16 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 8,
-    borderRadius: 12,
-    overflow: "hidden",
-    shadowColor: "#8B5CF6",
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 10,
-  },
-  buttonGradient: {
-    height: 54,
+    height: buttonTokens.height,
+    borderRadius: buttonTokens.radius,
+    backgroundColor: buttonTokens.primaryBg,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: buttonTokens.shadowColor,
+    shadowOpacity: buttonTokens.shadowOpacity,
+    shadowRadius: buttonTokens.shadowRadius,
+    shadowOffset: buttonTokens.shadowOffset,
+    elevation: buttonTokens.elevation,
   },
   buttonText: {
     color: "#fff",

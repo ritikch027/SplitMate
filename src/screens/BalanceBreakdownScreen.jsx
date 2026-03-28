@@ -27,7 +27,13 @@ import AnimatedBackdrop from "../components/AnimatedBackdrop";
 import MemberAvatar from "../components/MemberAvatar";
 import ScreenHeader from "../components/ScreenHeader";
 import SkeletonLoader from "../components/SkeletonLoader";
-import { fontSize, radius, spacing } from "../constants/theme";
+import {
+  buttonTokens,
+  fontSize,
+  radius,
+  spacing,
+  surfaces,
+} from "../constants/theme";
 import { useAlert } from "../context/useAlert";
 import { useAuth } from "../context/useAuth";
 import {
@@ -526,7 +532,7 @@ export default function BalanceBreakdownScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#020617",
+    backgroundColor: surfaces.screen,
     paddingHorizontal: 20,
   },
   summaryStrip: {
@@ -538,7 +544,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 92,
     borderRadius: 16,
-    backgroundColor: "rgba(15,23,42,0.88)",
+    backgroundColor: surfaces.card,
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.14)",
     paddingHorizontal: 14,
@@ -573,9 +579,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: radius.full,
-    backgroundColor: "rgba(15,23,42,0.74)",
+    backgroundColor: surfaces.input,
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.14)",
+    borderColor: surfaces.border,
   },
   filterChipActive: {
     backgroundColor: "rgba(124,58,237,0.18)",
@@ -595,9 +601,9 @@ const styles = StyleSheet.create({
   },
   rowCard: {
     borderRadius: 18,
-    backgroundColor: "rgba(15,23,42,0.88)",
+    backgroundColor: surfaces.card,
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.14)",
+    borderColor: surfaces.border,
     padding: 16,
   },
   rowTop: {
@@ -647,7 +653,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: radius.full,
-    backgroundColor: "rgba(30,41,59,0.8)",
+    backgroundColor: surfaces.muted,
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.12)",
   },
@@ -666,18 +672,19 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    borderRadius: 12,
+    minHeight: 42,
+    borderRadius: buttonTokens.radius,
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderWidth: 1,
   },
   remindButton: {
-    backgroundColor: "rgba(52,211,153,0.16)",
-    borderColor: "rgba(52,211,153,0.32)",
+    backgroundColor: buttonTokens.primaryBg,
+    borderColor: buttonTokens.primaryBg,
   },
   payButton: {
-    backgroundColor: "rgba(251,113,133,0.16)",
-    borderColor: "rgba(251,113,133,0.32)",
+    backgroundColor: surfaces.input,
+    borderColor: surfaces.border,
   },
   actionText: {
     color: "#F8FAFC",
@@ -705,11 +712,11 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(2,6,23,0.75)",
+    backgroundColor: surfaces.overlay,
     justifyContent: "flex-end",
   },
   modalSheet: {
-    backgroundColor: "#0F172A",
+    backgroundColor: surfaces.cardStrong,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
@@ -739,9 +746,9 @@ const styles = StyleSheet.create({
     marginBottom: 22,
   },
   modalPrimaryButton: {
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: "rgba(124,58,237,0.86)",
+    height: buttonTokens.height,
+    borderRadius: buttonTokens.radius,
+    backgroundColor: buttonTokens.primaryBg,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -754,11 +761,11 @@ const styles = StyleSheet.create({
     fontWeight: "800",
   },
   modalSecondaryButton: {
-    height: 46,
-    borderRadius: 14,
+    height: buttonTokens.height,
+    borderRadius: buttonTokens.radius,
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.16)",
-    backgroundColor: "rgba(15,23,42,0.6)",
+    borderColor: buttonTokens.secondaryBorder,
+    backgroundColor: buttonTokens.secondaryBg,
     alignItems: "center",
     justifyContent: "center",
   },

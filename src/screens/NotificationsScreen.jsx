@@ -13,7 +13,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
 import ScreenHeader from "../components/ScreenHeader";
-import { colors, fontSize, spacing } from "../constants/theme";
+import { buttonTokens, colors, fontSize, spacing, surfaces } from "../constants/theme";
 import { useAlert } from "../context/useAlert";
 import { useAuth } from "../context/useAuth";
 import {
@@ -192,7 +192,7 @@ export default function NotificationsScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#050816",
+    backgroundColor: surfaces.screen,
     paddingHorizontal: 20,
   },
   content: {
@@ -206,8 +206,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(124,58,237,0.24)",
-    backgroundColor: "rgba(124,58,237,0.12)",
+    borderColor: buttonTokens.secondaryBorder,
+    backgroundColor: buttonTokens.secondaryBg,
   },
   markAllDisabled: {
     opacity: 0.5,
@@ -226,13 +226,13 @@ const styles = StyleSheet.create({
     gap: 14,
     padding: 16,
     borderRadius: 16,
-    backgroundColor: "rgba(15,23,42,0.9)",
+    backgroundColor: surfaces.card,
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.14)",
   },
   itemCardUnread: {
     borderColor: "rgba(124,58,237,0.32)",
-    backgroundColor: "rgba(30,41,59,0.96)",
+    backgroundColor: surfaces.cardStrong,
   },
   itemIconWrap: {
     width: 40,
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(124,58,237,0.12)",
+    backgroundColor: surfaces.glowAccent,
   },
   itemBody: {
     flex: 1,

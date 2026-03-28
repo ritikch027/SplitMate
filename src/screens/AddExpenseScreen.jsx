@@ -16,7 +16,7 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
-import { colors } from "../constants/theme";
+import { buttonTokens, colors, surfaces } from "../constants/theme";
 import { useAlert } from "../context/useAlert";
 import { useAuth } from "../context/useAuth";
 import { addExpense, updateExpense } from "../services/expenseService";
@@ -379,14 +379,14 @@ export default function AddExpenseScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000",
+    backgroundColor: surfaces.screen,
     justifyContent: "flex-end",
   },
   sheet: {
     maxHeight: "96%",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    backgroundColor: "#111827",
+    backgroundColor: surfaces.cardStrong,
   },
   handle: {
     alignSelf: "center",
@@ -450,7 +450,7 @@ const styles = StyleSheet.create({
   description: {
     height: 50,
     borderRadius: 10,
-    backgroundColor: "#1F2937",
+    backgroundColor: surfaces.input,
     color: "#F8FAFC",
     paddingHorizontal: 16,
     fontSize: 16,
@@ -481,7 +481,7 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1F2937",
+    backgroundColor: surfaces.input,
     marginBottom: 8,
   },
   categoryIconWrapActive: {
@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
   },
   toggleWrap: {
     flexDirection: "row",
-    backgroundColor: "#1F2937",
+    backgroundColor: surfaces.input,
     borderRadius: 10,
     padding: 4,
   },
@@ -585,11 +585,16 @@ const styles = StyleSheet.create({
   },
   submit: {
     marginTop: 8,
-    height: 54,
-    borderRadius: 10,
-    backgroundColor: colors.accent,
+    height: buttonTokens.height,
+    borderRadius: buttonTokens.radius,
+    backgroundColor: buttonTokens.primaryBg,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: buttonTokens.shadowColor,
+    shadowOpacity: buttonTokens.shadowOpacity,
+    shadowRadius: buttonTokens.shadowRadius,
+    shadowOffset: buttonTokens.shadowOffset,
+    elevation: buttonTokens.elevation,
   },
   submitText: {
     color: "#fff",

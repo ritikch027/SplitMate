@@ -3,7 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
 
-import { colors, fontSize, spacing } from "../constants/theme";
+import { colors, fontSize, spacing, surfaces } from "../constants/theme";
 
 export default function ScreenHeader({
   title,
@@ -67,9 +67,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(30,41,59,0.72)",
+    backgroundColor: surfaces.input,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: surfaces.border,
   },
   placeholder: {
     width: 40,
@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   subtitle: {
-    color: "#8A94A8",
+    color: colors.subtext,
     fontSize: fontSize.sm,
     fontWeight: "500",
     marginTop: 3,

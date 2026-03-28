@@ -20,7 +20,7 @@ import AnimatedBackdrop from "../components/AnimatedBackdrop";
 import GroupCard from "../components/GroupCard";
 import MemberAvatar from "../components/MemberAvatar";
 import SkeletonLoader from "../components/SkeletonLoader";
-import { colors, fontSize, spacing } from "../constants/theme";
+import { buttonTokens, colors, fontSize, spacing, surfaces } from "../constants/theme";
 import { useAuth } from "../context/useAuth";
 import {
   calculateBalances,
@@ -331,7 +331,7 @@ export default function HomeScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#020617",
+    backgroundColor: surfaces.screen,
     paddingHorizontal: 20,
   },
   listContent: {
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 2,
     borderColor: "rgba(124,58,237,0.28)",
-    backgroundColor: "rgba(30,41,59,0.76)",
+    backgroundColor: surfaces.muted,
   },
   notificationButton: {
     width: 42,
@@ -375,7 +375,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.14)",
-    backgroundColor: "rgba(15,23,42,0.88)",
+    backgroundColor: surfaces.card,
   },
   notificationDot: {
     position: "absolute",
@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
   searchWrap: {
     height: 42,
     borderRadius: 10,
-    backgroundColor: "rgba(15,23,42,0.88)",
+    backgroundColor: surfaces.card,
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.12)",
     flexDirection: "row",
@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
   },
   statCard: {
     minHeight: 74,
-    backgroundColor: "rgba(15,23,42,0.88)",
+    backgroundColor: surfaces.card,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.14)",
@@ -480,13 +480,13 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: colors.accent,
+    backgroundColor: buttonTokens.primaryBg,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: colors.accent,
-    shadowOpacity: 0.45,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 12,
+    shadowColor: buttonTokens.shadowColor,
+    shadowOpacity: buttonTokens.shadowOpacity,
+    shadowRadius: buttonTokens.shadowRadius,
+    shadowOffset: buttonTokens.shadowOffset,
+    elevation: buttonTokens.elevation,
   },
 });

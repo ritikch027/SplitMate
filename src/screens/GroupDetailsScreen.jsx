@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
 import MemberAvatar from "../components/MemberAvatar";
-import { colors } from "../constants/theme";
+import { buttonTokens, colors, surfaces } from "../constants/theme";
 import { useAlert } from "../context/useAlert";
 import { useAuth } from "../context/useAuth";
 import {
@@ -473,7 +473,7 @@ export default function GroupDetailsScreen({ navigation, route }) {
         }
       >
         <LinearGradient
-          colors={["#8B5CF6", "#14B8A6"]}
+          colors={[buttonTokens.primaryBg, buttonTokens.primaryBg]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.addBtnGradient}
@@ -569,13 +569,13 @@ export default function GroupDetailsScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#020617",
+    backgroundColor: surfaces.screen,
   },
   loading: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#020617",
+    backgroundColor: surfaces.screen,
   },
   loadingText: { color: "#94A3B8" },
 
@@ -590,7 +590,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "rgba(15,23,42,0.88)",
+    backgroundColor: surfaces.card,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -619,7 +619,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "rgba(15,23,42,0.88)",
+    backgroundColor: surfaces.card,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -633,7 +633,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     marginHorizontal: 16,
     borderRadius: 14,
-    backgroundColor: "rgba(15,23,42,0.88)",
+    backgroundColor: surfaces.card,
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.12)",
   },
@@ -654,7 +654,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginBottom: 20,
     borderRadius: 14,
-    backgroundColor: "rgba(15,23,42,0.9)",
+    backgroundColor: surfaces.card,
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.1)",
     overflow: "hidden",
@@ -766,7 +766,7 @@ const styles = StyleSheet.create({
   expenseCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(15,23,42,0.92)",
+    backgroundColor: surfaces.cardStrong,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.12)",
@@ -866,16 +866,16 @@ const styles = StyleSheet.create({
     left: 16,
     right: 16,
     bottom: 24,
-    borderRadius: 14,
-    overflow: "hidden",
-    shadowColor: "#8B5CF6",
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 10,
+    borderRadius: buttonTokens.radius,
+    backgroundColor: buttonTokens.primaryBg,
+    shadowColor: buttonTokens.shadowColor,
+    shadowOpacity: buttonTokens.shadowOpacity,
+    shadowRadius: buttonTokens.shadowRadius,
+    shadowOffset: buttonTokens.shadowOffset,
+    elevation: buttonTokens.elevation,
   },
   addBtnGradient: {
-    height: 54,
+    height: buttonTokens.height,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -892,10 +892,10 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(2,6,23,0.75)",
+    backgroundColor: surfaces.overlay,
   },
   modalSheet: {
-    backgroundColor: "#0F172A",
+    backgroundColor: surfaces.cardStrong,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
@@ -933,7 +933,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 46,
     borderRadius: 10,
-    backgroundColor: "rgba(15,23,42,0.9)",
+    backgroundColor: surfaces.inputStrong,
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.14)",
     color: "#F8FAFC",
@@ -944,7 +944,7 @@ const styles = StyleSheet.create({
     height: 46,
     paddingHorizontal: 18,
     borderRadius: 10,
-    backgroundColor: colors.accent,
+    backgroundColor: buttonTokens.primaryBg,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -993,9 +993,9 @@ const styles = StyleSheet.create({
   modalCloseBtn: {
     height: 48,
     borderRadius: 10,
-    backgroundColor: "rgba(15,23,42,0.74)",
+    backgroundColor: buttonTokens.secondaryBg,
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.14)",
+    borderColor: buttonTokens.secondaryBorder,
     alignItems: "center",
     justifyContent: "center",
   },

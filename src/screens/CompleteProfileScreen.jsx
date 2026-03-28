@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
 import MemberAvatar from "../components/MemberAvatar";
-import { colors, fontSize } from "../constants/theme";
+import { buttonTokens, colors, fontSize, surfaces } from "../constants/theme";
 import { useAlert } from "../context/useAlert";
 import { useAuth } from "../context/useAuth";
 import { uploadProfilePhoto } from "../services/storageService";
@@ -184,7 +184,7 @@ export default function CompleteProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0A1020",
+    backgroundColor: surfaces.screenSoft,
     paddingHorizontal: 20,
   },
   content: {
@@ -209,9 +209,9 @@ const styles = StyleSheet.create({
   },
   previewCard: {
     borderRadius: 16,
-    backgroundColor: "rgba(20, 28, 45, 0.84)",
+    backgroundColor: surfaces.card,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: surfaces.border,
     padding: 20,
   },
   avatarWrap: {
@@ -226,7 +226,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: "rgba(124,58,237,0.12)",
+    backgroundColor: surfaces.glowAccent,
     borderWidth: 1,
     borderColor: "rgba(124,58,237,0.24)",
     marginBottom: 20,
@@ -248,9 +248,9 @@ const styles = StyleSheet.create({
   input: {
     height: 50,
     borderRadius: 10,
-    backgroundColor: "#1F2937",
+    backgroundColor: surfaces.input,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: surfaces.border,
     color: "#F8FAFC",
     paddingHorizontal: 14,
     fontSize: 15,
@@ -258,9 +258,9 @@ const styles = StyleSheet.create({
   phonePill: {
     minHeight: 50,
     borderRadius: 10,
-    backgroundColor: "rgba(31,41,55,0.7)",
+    backgroundColor: surfaces.input,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: surfaces.border,
     justifyContent: "center",
     paddingHorizontal: 14,
   },
@@ -271,11 +271,16 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 20,
-    height: 52,
-    borderRadius: 12,
-    backgroundColor: colors.accent,
+    height: buttonTokens.height,
+    borderRadius: buttonTokens.radius,
+    backgroundColor: buttonTokens.primaryBg,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: buttonTokens.shadowColor,
+    shadowOpacity: buttonTokens.shadowOpacity,
+    shadowRadius: buttonTokens.shadowRadius,
+    shadowOffset: buttonTokens.shadowOffset,
+    elevation: buttonTokens.elevation,
   },
   buttonText: {
     color: "#fff",

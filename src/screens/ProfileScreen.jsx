@@ -17,7 +17,14 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
 import MemberAvatar from "../components/MemberAvatar";
-import { colors, fontSize, radius, spacing } from "../constants/theme";
+import {
+  buttonTokens,
+  colors,
+  fontSize,
+  radius,
+  spacing,
+  surfaces,
+} from "../constants/theme";
 import { useAlert } from "../context/useAlert";
 import { useAuth } from "../context/useAuth";
 import { signOut } from "../services/authService";
@@ -558,7 +565,7 @@ export default function ProfileScreen({ navigation }) {
   Styles
 ──────────────────────────────────────────────────────────────*/
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#050816" },
+  root: { flex: 1, backgroundColor: surfaces.screen },
   content: { paddingHorizontal: 20, paddingBottom: 120 },
   loadingWrap: {
     flex: 1,
@@ -575,7 +582,7 @@ const styles = StyleSheet.create({
     width: 300,
     height: 300,
     borderRadius: 150,
-    backgroundColor: "rgba(124,58,237,0.18)",
+    backgroundColor: surfaces.glowAccent,
     shadowColor: colors.accent,
     shadowOpacity: 0.4,
     shadowRadius: 50,
@@ -598,7 +605,7 @@ const styles = StyleSheet.create({
   avatarOuter: {
     padding: 8,
     borderRadius: 999,
-    backgroundColor: "rgba(15,23,42,0.86)",
+    backgroundColor: surfaces.card,
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.16)",
   },
@@ -614,10 +621,10 @@ const styles = StyleSheet.create({
   statCardWrap: { flex: 1 },
   statCard: {
     minHeight: 74,
-    backgroundColor: "rgba(21, 29, 48, 0.96)",
+    backgroundColor: surfaces.card,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.16)",
+    borderColor: surfaces.border,
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 14,
@@ -645,8 +652,8 @@ const styles = StyleSheet.create({
     minHeight: 58,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.14)",
-    backgroundColor: "rgba(21, 29, 48, 0.96)",
+    borderColor: surfaces.border,
+    backgroundColor: surfaces.card,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
@@ -683,10 +690,10 @@ const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(2,6,23,0.72)",
+    backgroundColor: surfaces.overlay,
   },
   modalSheet: {
-    backgroundColor: "#0F172A",
+    backgroundColor: surfaces.cardStrong,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
     padding: spacing.lg,
@@ -748,7 +755,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   modalInput: {
-    backgroundColor: "rgba(15,23,42,0.9)",
+    backgroundColor: surfaces.inputStrong,
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.2)",
     padding: spacing.md,
@@ -760,9 +767,9 @@ const styles = StyleSheet.create({
   phonePill: {
     minHeight: 50,
     borderRadius: radius.md,
-    backgroundColor: "rgba(15,23,42,0.7)",
+    backgroundColor: buttonTokens.secondaryBg,
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.2)",
+    borderColor: buttonTokens.secondaryBorder,
     justifyContent: "center",
     paddingHorizontal: spacing.md,
     marginBottom: spacing.lg,
@@ -780,7 +787,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(148,163,184,0.2)",
     alignItems: "center",
-    backgroundColor: "rgba(15,23,42,0.7)",
+    backgroundColor: buttonTokens.secondaryBg,
   },
   cancelText: { color: "#CBD5E1", fontWeight: "600" },
   saveBtn: {
@@ -788,11 +795,16 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radius.md,
     alignItems: "center",
-    backgroundColor: colors.accent,
+    backgroundColor: buttonTokens.primaryBg,
+    shadowColor: buttonTokens.shadowColor,
+    shadowOpacity: buttonTokens.shadowOpacity,
+    shadowRadius: buttonTokens.shadowRadius,
+    shadowOffset: buttonTokens.shadowOffset,
+    elevation: buttonTokens.elevation,
   },
   saveText: { color: "#FFFFFF", fontWeight: "700", fontSize: fontSize.md },
   confirmSheet: {
-    backgroundColor: "#0F172A",
+    backgroundColor: surfaces.cardStrong,
     borderRadius: 24,
     padding: spacing.lg,
     borderWidth: 1,
@@ -828,9 +840,9 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     borderRadius: radius.md,
     alignItems: "center",
-    backgroundColor: "rgba(239,68,68,0.16)",
+    backgroundColor: buttonTokens.dangerBg,
     borderWidth: 1,
-    borderColor: "rgba(239,68,68,0.28)",
+    borderColor: buttonTokens.dangerBorder,
   },
   dangerText: {
     color: "#F87171",

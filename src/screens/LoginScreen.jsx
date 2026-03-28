@@ -17,7 +17,13 @@ import Animated, { FadeInDown } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
-import { colors, fontSize, spacing } from "../constants/theme";
+import {
+  buttonTokens,
+  colors,
+  fontSize,
+  spacing,
+  surfaces,
+} from "../constants/theme";
 import { sendOTP } from "../services/authService";
 
 export default function LoginScreen({ navigation }) {
@@ -103,20 +109,15 @@ export default function LoginScreen({ navigation }) {
 
         <TouchableOpacity
           activeOpacity={0.9}
-          style={styles.buttonWrap}
+          style={styles.button}
           onPress={handleContinue}
           disabled={loading}
         >
-          <LinearGradient
-            colors={[colors.accent, colors.cyan]}
-            style={styles.button}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Continue</Text>
-            )}
-          </LinearGradient>
+          {loading ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.buttonText}>Continue</Text>
+          )}
         </TouchableOpacity>
       </Animated.View>
 
@@ -137,7 +138,7 @@ export default function LoginScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0A1020",
+    backgroundColor: surfaces.screenSoft,
     paddingHorizontal: 20,
     justifyContent: "center",
   },
@@ -148,7 +149,7 @@ const styles = StyleSheet.create({
     width: 280,
     height: 280,
     borderRadius: 140,
-    backgroundColor: "rgba(124,58,237,0.18)",
+    backgroundColor: surfaces.glowAccent,
   },
   glowBottom: {
     position: "absolute",
@@ -157,7 +158,7 @@ const styles = StyleSheet.create({
     width: 320,
     height: 320,
     borderRadius: 160,
-    backgroundColor: "rgba(6,182,212,0.14)",
+    backgroundColor: surfaces.glowCyan,
   },
   header: {
     alignItems: "center",
@@ -184,9 +185,9 @@ const styles = StyleSheet.create({
   card: {
     padding: 28,
     borderRadius: 12,
-    backgroundColor: "rgba(20, 28, 45, 0.82)",
+    backgroundColor: surfaces.card,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
+    borderColor: surfaces.border,
   },
   label: {
     color: "#8B93A7",
@@ -201,9 +202,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     height: 52,
     borderRadius: 10,
-    backgroundColor: "rgba(255,255,255,0.05)",
+    backgroundColor: surfaces.input,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.06)",
+    borderColor: surfaces.border,
     paddingHorizontal: 14,
   },
   prefix: {
@@ -221,21 +222,21 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: fontSize.sm,
   },
-  buttonWrap: {
-    marginTop: 22,
-  },
   button: {
-    height: 48,
-    borderRadius: 10,
+    marginTop: 22,
+    height: buttonTokens.height,
+    borderRadius: buttonTokens.radius,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: colors.accent,
-    shadowOpacity: 0.35,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
+    backgroundColor: buttonTokens.primaryBg,
+    shadowColor: buttonTokens.shadowColor,
+    shadowOpacity: buttonTokens.shadowOpacity,
+    shadowRadius: buttonTokens.shadowRadius,
+    shadowOffset: buttonTokens.shadowOffset,
+    elevation: buttonTokens.elevation,
   },
   buttonText: {
-    color: "#fff",
+    color: buttonTokens.primaryText,
     fontSize: fontSize.md,
     fontWeight: "700",
   },

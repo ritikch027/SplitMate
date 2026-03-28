@@ -20,7 +20,13 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
-import { colors, fontSize, spacing } from "../constants/theme";
+import {
+  buttonTokens,
+  colors,
+  fontSize,
+  spacing,
+  surfaces,
+} from "../constants/theme";
 import { sendOTP, verifyOTP } from "../services/authService";
 
 export default function OTPScreen({ navigation, route }) {
@@ -233,7 +239,7 @@ export default function OTPScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#020617",
+    backgroundColor: surfaces.screen,
     paddingHorizontal: 20,
     justifyContent: "center",
   },
@@ -247,9 +253,9 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(15,23,42,0.82)",
+    backgroundColor: surfaces.card,
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.16)",
+    borderColor: surfaces.border,
     marginBottom: 26,
   },
   title: {
@@ -278,16 +284,16 @@ const styles = StyleSheet.create({
     width: 42,
     height: 50,
     borderRadius: 10,
-    backgroundColor: "rgba(15,23,42,0.88)",
+    backgroundColor: surfaces.inputStrong,
     borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.16)",
+    borderColor: surfaces.border,
     textAlign: "center",
     color: "#F8FAFC",
     fontSize: 24,
     fontWeight: "700",
   },
   otpFilled: {
-    backgroundColor: "rgba(30,41,59,0.88)",
+    backgroundColor: surfaces.muted,
     borderColor: "rgba(124,58,237,0.55)",
   },
   error: {
@@ -306,11 +312,16 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   button: {
-    height: 50,
-    borderRadius: 10,
-    backgroundColor: colors.accent,
+    height: buttonTokens.height,
+    borderRadius: buttonTokens.radius,
+    backgroundColor: buttonTokens.primaryBg,
     alignItems: "center",
     justifyContent: "center",
+    shadowColor: buttonTokens.shadowColor,
+    shadowOpacity: buttonTokens.shadowOpacity,
+    shadowRadius: buttonTokens.shadowRadius,
+    shadowOffset: buttonTokens.shadowOffset,
+    elevation: buttonTokens.elevation,
   },
   buttonText: {
     color: "#fff",

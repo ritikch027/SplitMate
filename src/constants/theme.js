@@ -34,3 +34,35 @@ export const fontSize = {
   xl: 24,
   xxl: 32,
 };
+
+export const surfaces = {
+  screen: "#020617",
+  screenSoft: colors.bg,
+  card: "rgba(15,23,42,0.88)",
+  cardStrong: "rgba(15,23,42,0.94)",
+  input: "rgba(15,23,42,0.72)",
+  inputStrong: "rgba(15,23,42,0.9)",
+  muted: "rgba(30,41,59,0.76)",
+  overlay: "rgba(2,6,23,0.74)",
+  border: "rgba(148,163,184,0.16)",
+  glowAccent: "rgba(124,58,237,0.16)",
+  glowCyan: "rgba(6,182,212,0.12)",
+};
+
+export const buttonTokens = {
+  height: 52,
+  radius: 14,
+  primaryBg: colors.accent,
+  primaryText: "#FFFFFF",
+  secondaryBg: surfaces.input,
+  secondaryBorder: surfaces.border,
+  secondaryText: "#CBD5E1",
+  dangerBg: "rgba(239,68,68,0.16)",
+  dangerBorder: "rgba(239,68,68,0.28)",
+  dangerText: "#F87171",
+  shadowColor: colors.accent,
+  shadowOpacity: 0.28,
+  shadowRadius: 16,
+  shadowOffset: { width: 0, height: 8 },
+  elevation: 10,
+};

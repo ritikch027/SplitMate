@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
 import SkeletonLoader from "../components/SkeletonLoader";
-import { colors, spacing } from "../constants/theme";
+import { colors, spacing, surfaces } from "../constants/theme";
 import { useAuth } from "../context/useAuth";
 import { getExpenseShareForUser } from "../services/balanceCalculator";
 import { getUserExpenses } from "../services/expenseService";
@@ -230,7 +230,7 @@ export default function ActivityScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#020617",
+    backgroundColor: surfaces.screen,
     paddingHorizontal: 20,
   },
   header: {
@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "rgba(30,41,59,0.76)",
+    backgroundColor: surfaces.muted,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
     alignItems: "center",
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: "rgba(30,41,59,0.6)",
+    backgroundColor: surfaces.input,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.06)",
   },
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 76,
     borderRadius: 12,
-    backgroundColor: "rgba(15,23,42,0.88)",
+    backgroundColor: surfaces.card,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     padding: 14,
@@ -365,7 +365,7 @@ const styles = StyleSheet.create({
   activityCard: {
     flex: 1,
     borderRadius: 12,
-    backgroundColor: "rgba(30,41,59,0.78)",
+    backgroundColor: surfaces.muted,
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
     padding: 14,
