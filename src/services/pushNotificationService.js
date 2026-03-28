@@ -194,7 +194,7 @@ export const sendPushNotificationsToUsers = async (
       return { success: true, count: 0 };
     }
 
-    const { error } = await supabase.functions.invoke("send-push-notifications", {
+    const { data, error } = await supabase.functions.invoke("send-push-notifications", {
       body: {
         userIds: recipients,
         notification: notificationPayload,
@@ -203,7 +203,12 @@ export const sendPushNotificationsToUsers = async (
 
     if (error) throw error;
 
-    return { success: true, count: recipients.length };
+    return {
+      success: true,
+      count: recipients.length,
+      sent: Number(data?.sent || 0),
+      details: data || null,
+    };
   } catch (error) {
     const details = await getFunctionErrorDetails(error);
     console.error("Send push notifications error:", error, details);

@@ -19,6 +19,7 @@ const ALLOWED_PROFILE_FIELDS = new Set([
   "profileCompleted",
   "phone",
   "groups",
+  "upiId",
 ]);
 
 const sanitizeName = (name) => {
@@ -71,6 +72,15 @@ const sanitizeProfileUpdate = (data = {}) => {
       return;
     }
 
+    if (key === "upiId") {
+      const upiId = String(value || "").trim();
+      if (upiId && !/^[\w.\-]{2,256}@[a-zA-Z]{2,64}$/.test(upiId)) {
+        throw new Error("UPI ID must look like name@bank.");
+      }
+      sanitized.upiId = upiId;
+      return;
+    }
+
     if (key === "profileCompleted") {
       sanitized.profileCompleted = Boolean(value);
       return;
@@ -120,6 +130,7 @@ export const createUser = async (userId, phoneNumber) => {
       phone: sanitizePhone(phoneNumber),
       name: "",
       photoUrl: "",
+      upiId: "",
       profileCompleted: false,
       createdAt: new Date().toISOString(),
       groups: [],

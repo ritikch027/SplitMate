@@ -36,6 +36,7 @@ import {
   removeMemberFromGroup,
 } from "../services/groupService";
 import { getUsersByIds, getUsersByPhone } from "../services/userService";
+import { formatRecentTimestamp } from "../utils/dateTime";
 
 /*──────────────────────────────────────────────────────────────
   Category color map
@@ -62,11 +63,7 @@ function ExpenseCard({ item, userId, onEdit, onDelete, index }) {
   const canEdit = item.createdBy === userId;
   const catStyle = getCategoryStyle(item.category);
 
-  const dateStr = item.createdAt?.toDate?.()
-    ? item.createdAt
-        .toDate()
-        .toLocaleDateString("en-IN", { month: "short", day: "numeric" })
-    : "Recently";
+  const dateStr = formatRecentTimestamp(item.createdAt);
 
   return (
     <Animated.View entering={FadeInDown.delay(index * 55).springify()}>

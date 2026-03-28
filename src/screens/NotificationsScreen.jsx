@@ -32,6 +32,8 @@ const NOTIFICATION_ICON = {
   group_member_joined: "people-outline",
   group_member_removed: "person-remove-outline",
   group_member_left: "exit-outline",
+  payment_reminder: "notifications-outline",
+  settlement: "wallet-outline",
 };
 
 const formatRelativeTime = (value) => {

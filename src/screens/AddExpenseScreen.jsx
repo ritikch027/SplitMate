@@ -42,6 +42,8 @@ export default function AddExpenseScreen({ navigation, route }) {
   const [splitType, setSplitType] = useState(expense?.splits ? "custom" : "equal");
   const [customSplits, setCustomSplits] = useState(expense?.splits || {});
   const [loading, setLoading] = useState(false);
+  const [amountFocused, setAmountFocused] = useState(false);
+  const [activeCustomSplitId, setActiveCustomSplitId] = useState(null);
 
   const equalSplitPreview = useMemo(() => {
     const value = Number(amount);
@@ -198,7 +200,9 @@ export default function AddExpenseScreen({ navigation, route }) {
                 keyboardType="numeric"
                 value={amount}
                 onChangeText={setAmount}
-                placeholder="0.00"
+                onFocus={() => setAmountFocused(true)}
+                onBlur={() => setAmountFocused(false)}
+                placeholder={amountFocused ? "" : "0.00"}
                 placeholderTextColor="#243044"
               />
             </View>
@@ -309,7 +313,13 @@ export default function AddExpenseScreen({ navigation, route }) {
                       updateCustomSplit(member.id, value)
                     }
                     keyboardType="numeric"
-                    placeholder="0"
+                    onFocus={() => setActiveCustomSplitId(member.id)}
+                    onBlur={() =>
+                      setActiveCustomSplitId((current) =>
+                        current === member.id ? null : current,
+                      )
+                    }
+                    placeholder={activeCustomSplitId === member.id ? "" : "0"}
                     placeholderTextColor="#6B7280"
                     style={styles.customInput}
                   />

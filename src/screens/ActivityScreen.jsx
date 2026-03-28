@@ -19,6 +19,11 @@ import { colors, spacing } from "../constants/theme";
 import { useAuth } from "../context/useAuth";
 import { getExpenseShareForUser } from "../services/balanceCalculator";
 import { getUserExpenses } from "../services/expenseService";
+import {
+  formatActivitySectionLabel,
+  formatRecentTimestamp,
+  parseDateTime,
+} from "../utils/dateTime";
 
 const filters = ["All", "This Week", "This Month"];
 
@@ -68,7 +73,7 @@ export default function ActivityScreen() {
     const days = selectedFilter === "This Week" ? 7 : 30;
 
     return expenses.filter((expense) => {
-      const date = expense.createdAt?.toDate?.();
+      const date = parseDateTime(expense.createdAt);
       if (!date) return false;
 
       const diff = (now - date) / (1000 * 60 * 60 * 24);
@@ -78,18 +83,7 @@ export default function ActivityScreen() {
 
   const grouped = useMemo(() => {
     return filtered.reduce((acc, item) => {
-      const date = item.createdAt?.toDate?.();
-      let key = "Recently";
-
-      if (date) {
-        const today = new Date();
-        const yesterday = new Date();
-        yesterday.setDate(today.getDate() - 1);
-
-        if (date.toDateString() === today.toDateString()) key = "Today";
-        else if (date.toDateString() === yesterday.toDateString()) key = "Yesterday";
-        else key = date.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
-      }
+      const key = formatActivitySectionLabel(item.createdAt);
 
       if (!acc[key]) acc[key] = [];
       acc[key].push(item);
@@ -217,10 +211,7 @@ export default function ActivityScreen() {
 
                       <View style={styles.activityBottom}>
                         <Text style={styles.activityTime}>
-                          {expense.createdAt?.toDate?.().toLocaleTimeString("en-IN", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          }) || "Recently"}
+                          {formatRecentTimestamp(expense.createdAt)}
                         </Text>
                         <Text style={styles.activityGroup}>{expense.groupName || "Group"}</Text>
                       </View>

@@ -4,5 +4,6 @@ export const AuthContext = createContext({
   userProfile: null,
   loading: true,
   profileLoading: false,
+  profileResolved: false,
   refreshUserProfile: async () => {},
 });

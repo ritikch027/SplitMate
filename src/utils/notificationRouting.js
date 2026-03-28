@@ -2,6 +2,8 @@ export const EXPENSE_NOTIFICATION_TYPES = new Set([
   "expense_added",
   "expense_updated",
   "expense_deleted",
+  "payment_reminder",
+  "settlement",
 ]);
 
 export const GROUP_NOTIFICATION_TYPES = new Set([

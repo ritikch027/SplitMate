@@ -152,7 +152,8 @@ const MainStack = () => (
   Decides which stack to show based on auth + profile state
 ──────────────────────────────────────────────────────────────*/
 const RootNavigation = () => {
-  const { user, userProfile, loading, profileLoading } = useAuth();
+  const { user, userProfile, loading, profileLoading, profileResolved } =
+    useAuth();
 
   // Don't render anything while auth state is loading
   // Prevents flashing the wrong screen
@@ -162,7 +163,7 @@ const RootNavigation = () => {
   if (!user) return <AuthStack />;
 
   // Logged in but profile still not resolved on first pass → wait
-  if (!userProfile && profileLoading) return null;
+  if (!profileResolved || (!userProfile && profileLoading)) return null;
 
   // Logged in but profile not completed → show profile setup
   if (!userProfile?.profileCompleted) return <ProfileSetupStack />;

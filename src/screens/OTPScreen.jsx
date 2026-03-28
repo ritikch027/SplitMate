@@ -32,15 +32,13 @@ export default function OTPScreen({ navigation, route }) {
   const [error, setError] = useState("");
   const [timer, setTimer] = useState(59);
   const [statusText, setStatusText] = useState("");
+  const [focusedIndex, setFocusedIndex] = useState(null);
 
   const inputs = useRef([]);
   const shake = useSharedValue(0);
 
   const maskedPhone = `${phone.slice(0, 2)} •••• ${phone.slice(phone.length - 4)}`;
 
-  /*──────────────────────────────────────────────────────────────
-    Countdown timer
-  ──────────────────────────────────────────────────────────────*/
   useEffect(() => {
     if (timer === 0) return;
 
@@ -51,9 +49,6 @@ export default function OTPScreen({ navigation, route }) {
     return () => clearInterval(interval);
   }, [timer]);
 
-  /*──────────────────────────────────────────────────────────────
-    Shake animation — only transform, no entering
-  ──────────────────────────────────────────────────────────────*/
   const shakeStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: shake.value }],
   }));
@@ -68,9 +63,6 @@ export default function OTPScreen({ navigation, route }) {
     );
   };
 
-  /*──────────────────────────────────────────────────────────────
-    OTP input handler
-  ──────────────────────────────────────────────────────────────*/
   const handleChange = (value, index) => {
     const digit = value.replace(/\D/g, "");
     const nextOtp = [...otp];
@@ -90,9 +82,18 @@ export default function OTPScreen({ navigation, route }) {
     }
   };
 
-  /*──────────────────────────────────────────────────────────────
-    Verify OTP
-  ──────────────────────────────────────────────────────────────*/
+  const handleKeyPress = ({ nativeEvent }, index) => {
+    if (nativeEvent.key !== "Backspace") return;
+
+    if (otp[index]) {
+      return;
+    }
+
+    if (index > 0) {
+      inputs.current[index - 1]?.focus();
+    }
+  };
+
   const verify = async (code) => {
     if (code.length !== 6) return;
 
@@ -118,9 +119,6 @@ export default function OTPScreen({ navigation, route }) {
     }
   };
 
-  /*──────────────────────────────────────────────────────────────
-    Resend OTP
-  ──────────────────────────────────────────────────────────────*/
   const resendOTP = async () => {
     if (timer > 0) return;
 
@@ -135,9 +133,6 @@ export default function OTPScreen({ navigation, route }) {
     setTimer(59);
   };
 
-  /*──────────────────────────────────────────────────────────────
-    Render
-  ──────────────────────────────────────────────────────────────*/
   return (
     <View
       style={[
@@ -151,7 +146,6 @@ export default function OTPScreen({ navigation, route }) {
       <StatusBar barStyle="light-content" />
       <AnimatedBackdrop />
 
-      {/* ── Header ── */}
       <Animated.View entering={FadeInDown.springify()} style={styles.header}>
         <View style={styles.iconWrap}>
           <Ionicons
@@ -167,14 +161,8 @@ export default function OTPScreen({ navigation, route }) {
         </Text>
       </Animated.View>
 
-      {/* ── OTP inputs ──
-          FIX: entering on outer wrapper, transform (shake) on inner wrapper
-          Never put both on the same Animated.View
-      ──────────────────────────────────────────────────────────── */}
       <Animated.View entering={FadeInDown.delay(100).springify()}>
-        {/* ← entering lives here  */}
         <Animated.View style={shakeStyle}>
-          {/* ← transform lives here */}
           <View style={styles.otpContainer}>
             {otp.map((digit, index) => (
               <TextInput
@@ -187,7 +175,14 @@ export default function OTPScreen({ navigation, route }) {
                 maxLength={1}
                 value={digit}
                 onChangeText={(value) => handleChange(value, index)}
-                placeholder="•"
+                onKeyPress={(event) => handleKeyPress(event, index)}
+                onFocus={() => setFocusedIndex(index)}
+                onBlur={() =>
+                  setFocusedIndex((current) =>
+                    current === index ? null : current,
+                  )
+                }
+                placeholder={focusedIndex === index ? "" : "•"}
                 placeholderTextColor="#6B7280"
               />
             ))}
@@ -195,11 +190,9 @@ export default function OTPScreen({ navigation, route }) {
         </Animated.View>
       </Animated.View>
 
-      {/* ── Error / status ── */}
       {error ? <Text style={styles.error}>{error}</Text> : null}
       {statusText ? <Text style={styles.statusText}>{statusText}</Text> : null}
 
-      {/* ── Verify button ── */}
       <Animated.View
         entering={FadeInDown.delay(160).springify()}
         style={styles.buttonWrap}
@@ -219,7 +212,6 @@ export default function OTPScreen({ navigation, route }) {
         </TouchableOpacity>
       </Animated.View>
 
-      {/* ── Footer / resend ── */}
       <Animated.View entering={FadeInDown.delay(220)} style={styles.footer}>
         <Text style={styles.timerText}>
           Resend code in{" "}
@@ -238,9 +230,6 @@ export default function OTPScreen({ navigation, route }) {
   );
 }
 
-/*──────────────────────────────────────────────────────────────
-  Styles
-──────────────────────────────────────────────────────────────*/
 const styles = StyleSheet.create({
   container: {
     flex: 1,

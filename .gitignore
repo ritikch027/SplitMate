@@ -45,6 +45,7 @@ TODO.md
 app-example
 
 # Android generated files
+android/
 android/.gradle/
 android/build/
 android/app/build/

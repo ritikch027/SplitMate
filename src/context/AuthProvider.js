@@ -27,6 +27,7 @@ const AuthProvider = ({ children }) => {
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
+  const [profileResolved, setProfileResolved] = useState(false);
   const lastProfileErrorRef = useRef("");
 
   const fetchUserProfile = useCallback(
@@ -114,6 +115,7 @@ const AuthProvider = ({ children }) => {
           // Ignore cache failures and keep fallback profile in memory.
         }
       } finally {
+        setProfileResolved(true);
         setProfileLoading(false);
       }
     },
@@ -137,6 +139,9 @@ const AuthProvider = ({ children }) => {
       if (supabaseUser) {
         const normalizedUser = normalizeAuthUser(supabaseUser);
         setUser(normalizedUser);
+        setProfileResolved(false);
+        setProfileLoading(true);
+        setUserProfile(null);
         try {
           const cachedProfile = await AsyncStorage.getItem(
             getProfileCacheKey(supabaseUser.id),
@@ -144,28 +149,10 @@ const AuthProvider = ({ children }) => {
 
           if (cachedProfile && isMounted) {
             setUserProfile(JSON.parse(cachedProfile));
-          } else if (isMounted) {
-            setUserProfile({
-              id: supabaseUser.id,
-              phone: normalizedUser.phoneNumber,
-              name: "",
-              photoUrl: "",
-              groups: [],
-              profileCompleted: true,
-            });
+            setProfileResolved(true);
+            setProfileLoading(false);
           }
-        } catch (_cacheError) {
-          if (isMounted) {
-            setUserProfile({
-              id: supabaseUser.id,
-              phone: normalizedUser.phoneNumber,
-              name: "",
-              photoUrl: "",
-              groups: [],
-              profileCompleted: true,
-            });
-          }
-        }
+        } catch (_cacheError) {}
 
         if (isMounted) setLoading(false);
         fetchUserProfile(normalizedUser.uid, normalizedUser.phoneNumber);
@@ -173,6 +160,8 @@ const AuthProvider = ({ children }) => {
       } else {
         setUser(null);
         setUserProfile(null);
+        setProfileResolved(false);
+        setProfileLoading(false);
         setLoading(false);
       }
     });
@@ -203,6 +192,7 @@ const AuthProvider = ({ children }) => {
     userProfile,
     loading,
     profileLoading,
+    profileResolved,
     refreshUserProfile,
   };
 

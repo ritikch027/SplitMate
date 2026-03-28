@@ -1,139 +1,524 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { FlatList, StatusBar, StyleSheet, Text, View } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import Clipboard from "react-native/Libraries/Components/Clipboard/Clipboard";
+import {
+  Alert,
+  AppState,
+  FlatList,
+  Modal,
+  Pressable,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import * as Linking from "expo-linking";
 
-import Animated, { FadeInDown } from "react-native-reanimated";
+import { Ionicons } from "@expo/vector-icons";
+import Animated, {
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
+import MemberAvatar from "../components/MemberAvatar";
 import ScreenHeader from "../components/ScreenHeader";
 import SkeletonLoader from "../components/SkeletonLoader";
+import { fontSize, radius, spacing } from "../constants/theme";
+import { useAlert } from "../context/useAlert";
 import { useAuth } from "../context/useAuth";
-import { getExpenseShareForUser } from "../services/balanceCalculator";
-import { getUserExpenses } from "../services/expenseService";
+import {
+  getUserBalancesAcrossAllGroups,
+  recordSettlement,
+  sendBalanceReminder,
+} from "../services/balanceService";
+import {
+  formatCurrency,
+  getNetTotal,
+  getTotalOwe,
+  getTotalOwed,
+} from "../utils/balanceCalculator";
 
-const categoryColors = {
-  Food: "#7C3AED",
-  Transport: "#3B82F6",
-  Rent: "#F59E0B",
-  Shopping: "#EC4899",
-  Entertainment: "#06B6D4",
-  Other: "#10B981",
+const FILTERS = [
+  { key: "all", label: "All" },
+  { key: "owed", label: "Owed" },
+  { key: "owe", label: "Owe" },
+];
+
+const getInitialFilter = (mode) => {
+  if (mode === "owed" || mode === "owe") return mode;
+  return "all";
 };
 
-export default function BalanceBreakdownScreen({ navigation, route }) {
-  const { mode = "owe" } = route.params || {};
-  const { user } = useAuth();
-  const insets = useSafeAreaInsets();
-  const [expenses, setExpenses] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!user) return undefined;
-
-    const unsubscribe = getUserExpenses(user.uid, (data) => {
-      setExpenses(data);
-      setLoading(false);
-    });
-
-    return unsubscribe;
-  }, [user]);
-
-  const meta = mode === "owed"
-    ? {
-        title: "You Are Owed",
-        subtitle: "Expenses where others owe you back",
-        accent: "#34D399",
-      }
-    : {
-        title: "You Owe",
-        subtitle: "Expenses where you still owe someone",
-        accent: "#F87171",
-      };
-
-  const filteredExpenses = useMemo(
-    () =>
-      expenses.filter((expense) => {
-        const userShare = getExpenseShareForUser(expense, user?.uid);
-        const othersShare = Number(expense.amount || 0) - userShare;
-
-        if (mode === "owed") {
-          return expense.paidBy === user?.uid && othersShare > 0;
-        }
-
-        return expense.paidBy !== user?.uid && userShare > 0;
-      }),
-    [expenses, mode, user?.uid],
-  );
+function SummaryCard({ label, value, tone = "neutral" }) {
+  const valueStyle =
+    tone === "positive"
+      ? styles.summaryValuePositive
+      : tone === "negative"
+        ? styles.summaryValueNegative
+        : styles.summaryValue;
 
   return (
-    <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) + 6 }]}>
+    <View style={styles.summaryCard}>
+      <Text style={styles.summaryLabel}>{label}</Text>
+      <Text style={[styles.summaryValue, valueStyle]}>{value}</Text>
+    </View>
+  );
+}
+
+function ActionButton({ icon, label, tone, onPress }) {
+  const scale = useSharedValue(1);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  const handlePressIn = () => {
+    scale.value = withSpring(0.95, { damping: 18, stiffness: 220 });
+  };
+
+  const handlePressOut = () => {
+    scale.value = withSpring(1, { damping: 18, stiffness: 220 });
+  };
+
+  return (
+    <Pressable
+      onPress={onPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      style={styles.actionPressable}
+    >
+      <Animated.View
+        style={[
+          styles.actionButton,
+          tone === "positive" ? styles.remindButton : styles.payButton,
+          animatedStyle,
+        ]}
+      >
+        <Ionicons name={icon} size={15} color="#F8FAFC" />
+        <Text style={styles.actionText}>{label}</Text>
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+function BalanceRow({ item, index, onRemind, onPay }) {
+  const statusText =
+    item.netBalance > 0
+      ? `owes you ${formatCurrency(item.netBalance)}`
+      : item.netBalance < 0
+        ? `you owe ${formatCurrency(Math.abs(item.netBalance))}`
+        : "settled up ✓";
+
+  const statusStyle =
+    item.netBalance > 0
+      ? styles.statusPositive
+      : item.netBalance < 0
+        ? styles.statusNegative
+        : styles.statusNeutral;
+
+  return (
+    <Animated.View entering={FadeInDown.delay(index * 55).springify()}>
+      <View style={styles.rowCard}>
+        <View style={styles.rowTop}>
+          <View style={styles.rowIdentity}>
+            <MemberAvatar
+              name={item.name || item.phone || "User"}
+              photoUrl={item.photoUrl}
+              size="medium"
+            />
+            <View style={styles.rowMeta}>
+              <Text style={styles.rowName}>{item.name || item.phone || "User"}</Text>
+              <Text style={[styles.rowStatus, statusStyle]}>{statusText}</Text>
+            </View>
+          </View>
+
+          {item.netBalance > 0 ? (
+            <ActionButton
+              icon="notifications-outline"
+              label="Remind"
+              tone="positive"
+              onPress={() => onRemind(item)}
+            />
+          ) : item.netBalance < 0 ? (
+            <ActionButton
+              icon={item.upiId ? "arrow-up-circle-outline" : "copy-outline"}
+              label={item.upiId ? "Pay" : "Copy amount"}
+              tone="negative"
+              onPress={() => onPay(item)}
+            />
+          ) : null}
+        </View>
+
+        <View style={styles.chipsWrap}>
+          {item.sharedGroups.map((group) => (
+            <View key={group.id} style={styles.groupChip}>
+              <Text style={styles.groupChipEmoji}>{group.emoji || "👥"}</Text>
+              <Text style={styles.groupChipText}>{group.name}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
+
+export default function BalanceBreakdownScreen({ navigation, route }) {
+  const { mode } = route.params || {};
+  const { user, userProfile } = useAuth();
+  const { showAlert } = useAlert();
+  const insets = useSafeAreaInsets();
+
+  const [balances, setBalances] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedFilter, setSelectedFilter] = useState(getInitialFilter(mode));
+  const [manualSheet, setManualSheet] = useState(null);
+  const pendingSettlementRef = useRef(null);
+  const appStateRef = useRef(AppState.currentState);
+
+  const loadBalances = useCallback(async () => {
+    if (!user?.uid) {
+      setBalances([]);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    const result = await getUserBalancesAcrossAllGroups(user.uid);
+
+    if (!result.success) {
+      showAlert({
+        title: "Unable to load balances",
+        message: result.error || "Please try again.",
+        variant: "error",
+      });
+      setBalances([]);
+      setLoading(false);
+      return;
+    }
+
+    setBalances(result.balances || []);
+    setLoading(false);
+  }, [showAlert, user?.uid]);
+
+  useEffect(() => {
+    const run = async () => {
+      await loadBalances();
+    };
+
+    run();
+  }, [loadBalances]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      const wasInactive = appStateRef.current.match(/inactive|background/);
+      appStateRef.current = nextState;
+
+      if (!wasInactive || nextState !== "active" || !pendingSettlementRef.current) {
+        return;
+      }
+
+      const pending = pendingSettlementRef.current;
+      pendingSettlementRef.current = null;
+
+      Alert.alert(
+        "Confirm payment",
+        `Did you complete the payment to ${pending.name}?`,
+        [
+          { text: "No", style: "cancel" },
+          {
+            text: "Yes",
+            onPress: async () => {
+              const result = await recordSettlement(
+                pending.groupId,
+                user.uid,
+                pending.userId,
+                pending.amount,
+                {
+                  payerName:
+                    userProfile?.name || userProfile?.phone || user?.phoneNumber || "Someone",
+                  groupName: pending.groupName,
+                },
+              );
+
+              if (!result.success) {
+                showAlert({
+                  title: "Unable to record payment",
+                  message: result.error || "Please try again.",
+                  variant: "error",
+                });
+                return;
+              }
+
+              showAlert({
+                title: "Settlement recorded",
+                message: `Marked ${formatCurrency(pending.amount)} as paid.`,
+                variant: "success",
+              });
+              await loadBalances();
+            },
+          },
+        ],
+      );
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [loadBalances, showAlert, user?.phoneNumber, user?.uid, userProfile?.name, userProfile?.phone]);
+
+  const totals = {
+    owed: getTotalOwed(balances),
+    owe: getTotalOwe(balances),
+    net: getNetTotal(balances),
+  };
+
+  const filteredBalances = balances.filter((balance) => {
+    if (selectedFilter === "owed") return balance.netBalance > 0;
+    if (selectedFilter === "owe") return balance.netBalance < 0;
+    return true;
+  });
+
+  const allSettled = balances.length > 0 && balances.every((item) => item.netBalance === 0);
+
+  const handleSendReminder = async (balance) => {
+    try {
+      const amount = Number(balance.netBalance || 0);
+      const groupName = balance.sharedGroups[0]?.name || "your group";
+      const groupId = balance.latestGroupId || balance.sharedGroups[0]?.id || null;
+
+      const result = await sendBalanceReminder(
+        balance,
+        {
+          uid: user?.uid,
+          name: userProfile?.name,
+          phone: userProfile?.phone,
+          phoneNumber: user?.phoneNumber,
+        },
+        amount,
+        groupId,
+        groupName,
+      );
+
+      if (!result.success) {
+        showAlert({
+          title: "Unable to send reminder",
+          message: result.error || "Please try again.",
+          variant: "error",
+        });
+        return;
+      }
+
+      if (result.needsSmsFallback && balance.phone) {
+        const smsUrl = `sms:${balance.phone}?body=${encodeURIComponent(
+          result.smsBody,
+        )}`;
+        await Linking.openURL(smsUrl);
+      }
+
+      showAlert({
+        title: "Reminder sent",
+        message: `Reminder sent to ${balance.name || balance.phone || "member"}.`,
+        variant: "success",
+      });
+    } catch (_error) {
+      showAlert({
+        title: "Unable to open SMS",
+        message: "Push was unavailable and this device could not open the SMS app.",
+        variant: "error",
+      });
+    }
+  };
+
+  const copyAmount = (amount) => {
+    Clipboard.setString(String(Number(amount || 0).toFixed(2)));
+    showAlert({
+      title: "Amount copied",
+      message: `${formatCurrency(amount)} copied to clipboard.`,
+      variant: "success",
+    });
+  };
+
+  const handlePay = async (balance) => {
+    try {
+      const amount = Math.abs(Number(balance.netBalance || 0));
+      const groupName = balance.sharedGroups[0]?.name || "your group";
+      const groupId = balance.latestGroupId || balance.sharedGroups[0]?.id || null;
+
+      if (!balance.upiId) {
+        setManualSheet({
+          name: balance.name,
+          amount,
+          upiId: "",
+        });
+        return;
+      }
+
+      const upiUrl = `upi://pay?pa=${encodeURIComponent(
+        balance.upiId,
+      )}&am=${amount.toFixed(2)}&tn=SplitMate%20Settlement&cu=INR`;
+
+      const supported = await Linking.canOpenURL(upiUrl);
+
+      if (!supported) {
+        setManualSheet({
+          name: balance.name,
+          amount,
+          upiId: balance.upiId,
+        });
+        return;
+      }
+
+      pendingSettlementRef.current = {
+        userId: balance.userId,
+        name: balance.name || balance.phone || "member",
+        amount,
+        groupId,
+        groupName,
+      };
+
+      await Linking.openURL(upiUrl);
+    } catch (_error) {
+      setManualSheet({
+        name: balance.name,
+        amount: Math.abs(Number(balance.netBalance || 0)),
+        upiId: balance.upiId || "",
+      });
+    }
+  };
+
+  return (
+    <View
+      style={[
+        styles.container,
+        {
+          paddingTop: Math.max(insets.top, 16) + 6,
+          paddingBottom: Math.max(insets.bottom, 20),
+        },
+      ]}
+    >
       <StatusBar barStyle="light-content" />
       <AnimatedBackdrop />
 
-      <Animated.View entering={FadeInDown.springify()}>
-        <ScreenHeader
-          title={meta.title}
-          subtitle={meta.subtitle}
-          onBack={() => navigation.goBack()}
+      <ScreenHeader
+        title="Balances"
+        subtitle="Across all groups"
+        onBack={() => navigation.goBack()}
+      />
+
+      <View style={styles.summaryStrip}>
+        <SummaryCard
+          label="You are owed"
+          value={formatCurrency(totals.owed)}
+          tone="positive"
         />
-      </Animated.View>
+        <SummaryCard
+          label="You owe"
+          value={formatCurrency(totals.owe)}
+          tone="negative"
+        />
+        <SummaryCard
+          label="Net balance"
+          value={formatCurrency(Math.abs(totals.net))}
+          tone={totals.net >= 0 ? "positive" : "negative"}
+        />
+      </View>
+
+      <View style={styles.filtersRow}>
+        {FILTERS.map((filter) => {
+          const selected = filter.key === selectedFilter;
+
+          return (
+            <TouchableOpacity
+              key={filter.key}
+              activeOpacity={0.86}
+              style={[styles.filterChip, selected && styles.filterChipActive]}
+              onPress={() => setSelectedFilter(filter.key)}
+            >
+              <Text
+                style={[styles.filterText, selected && styles.filterTextActive]}
+              >
+                {filter.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
 
       {loading ? (
-        <SkeletonLoader variant="expense" count={5} />
+        <SkeletonLoader variant="card" count={5} />
+      ) : allSettled ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="sparkles-outline" size={34} color="#34D399" />
+          <Text style={styles.emptyTitle}>All settled up! 🎉</Text>
+          <Text style={styles.emptyText}>
+            Every shared expense is balanced right now.
+          </Text>
+        </View>
       ) : (
         <FlatList
-          data={filteredExpenses}
-          keyExtractor={(item) => item.id}
+          data={filteredBalances}
+          keyExtractor={(item) => item.userId}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
             <View style={styles.emptyState}>
-              <Text style={styles.emptyTitle}>Nothing here yet</Text>
+              <Text style={styles.emptyTitle}>Nothing in this view</Text>
               <Text style={styles.emptyText}>
-                {mode === "owed"
-                  ? "Expenses where others owe you will appear here."
-                  : "Expenses you still owe will appear here."}
+                Try another filter to see your balances.
               </Text>
             </View>
           }
-          renderItem={({ item, index }) => {
-            const color = categoryColors[item.category] || categoryColors.Other;
-            const userShare = getExpenseShareForUser(item, user?.uid);
-            const amount = mode === "owed" ? Number(item.amount || 0) - userShare : userShare;
-
-            return (
-              <Animated.View entering={FadeInDown.delay(index * 60)} style={styles.row}>
-                <View style={[styles.icon, { backgroundColor: color }]}>
-                  <Text style={styles.iconText}>{item.category?.charAt(0) || "R"}</Text>
-                </View>
-
-                <View style={styles.card}>
-                  <View style={styles.cardTop}>
-                    <Text style={styles.name}>{item.description}</Text>
-                    <Text style={[styles.amount, { color: meta.accent }]}>
-                      Rs {amount.toFixed(2)}
-                    </Text>
-                  </View>
-                  <Text style={styles.metaText}>
-                    {mode === "owed"
-                      ? `Paid by you in ${item.groupName || "your group"}`
-                      : `Paid by ${item.paidByName || "a group member"}`}
-                  </Text>
-                  <View style={styles.cardBottom}>
-                    <Text style={styles.time}>
-                      {item.createdAt?.toDate?.().toLocaleDateString("en-IN", {
-                        month: "short",
-                        day: "numeric",
-                      }) || "Recently"}
-                    </Text>
-                    <Text style={styles.group}>{item.groupName || "Group"}</Text>
-                  </View>
-                </View>
-              </Animated.View>
-            );
-          }}
+          renderItem={({ item, index }) => (
+            <BalanceRow
+              item={item}
+              index={index}
+              onRemind={handleSendReminder}
+              onPay={handlePay}
+            />
+          )}
         />
       )}
+
+      <Modal
+        transparent
+        visible={Boolean(manualSheet)}
+        animationType="fade"
+        onRequestClose={() => setManualSheet(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>
+              {manualSheet?.upiId ? "UPI app not available" : "Manual settlement"}
+            </Text>
+            <Text style={styles.modalBody}>
+              Pay {manualSheet?.name || "this member"} {manualSheet ? formatCurrency(manualSheet.amount) : ""}
+              {manualSheet?.upiId ? ` to ${manualSheet.upiId}` : ""}.
+            </Text>
+
+            <TouchableOpacity
+              activeOpacity={0.88}
+              style={styles.modalPrimaryButton}
+              onPress={() => copyAmount(manualSheet?.amount || 0)}
+            >
+              <Ionicons name="copy-outline" size={18} color="#F8FAFC" />
+              <Text style={styles.modalPrimaryText}>Copy Amount</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.86}
+              style={styles.modalSecondaryButton}
+              onPress={() => setManualSheet(null)}
+            >
+              <Text style={styles.modalSecondaryText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -144,81 +529,242 @@ const styles = StyleSheet.create({
     backgroundColor: "#020617",
     paddingHorizontal: 20,
   },
-  listContent: {
-    paddingBottom: 40,
-  },
-  row: {
+  summaryStrip: {
     flexDirection: "row",
-    marginBottom: 16,
+    gap: 10,
+    marginBottom: 18,
   },
-  icon: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  iconText: {
-    color: "#fff",
-    fontWeight: "800",
-  },
-  card: {
+  summaryCard: {
     flex: 1,
-    borderRadius: 12,
-    backgroundColor: "rgba(30,41,59,0.78)",
+    minHeight: 92,
+    borderRadius: 16,
+    backgroundColor: "rgba(15,23,42,0.88)",
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    padding: 14,
-  },
-  cardTop: {
-    flexDirection: "row",
+    borderColor: "rgba(148,163,184,0.14)",
+    paddingHorizontal: 14,
+    paddingVertical: 16,
     justifyContent: "space-between",
-    gap: 12,
   },
-  name: {
-    flex: 1,
-    color: "#F8FAFC",
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  amount: {
-    fontSize: 14,
+  summaryLabel: {
+    color: "#94A3B8",
+    fontSize: 11,
     fontWeight: "800",
+    textTransform: "uppercase",
+    letterSpacing: 1,
   },
-  metaText: {
+  summaryValue: {
+    color: "#F8FAFC",
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: -0.4,
+  },
+  summaryValuePositive: {
+    color: "#34D399",
+  },
+  summaryValueNegative: {
+    color: "#FB7185",
+  },
+  filtersRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 18,
+  },
+  filterChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: radius.full,
+    backgroundColor: "rgba(15,23,42,0.74)",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.14)",
+  },
+  filterChipActive: {
+    backgroundColor: "rgba(124,58,237,0.18)",
+    borderColor: "rgba(124,58,237,0.35)",
+  },
+  filterText: {
     color: "#94A3B8",
     fontSize: 13,
-    marginTop: 4,
+    fontWeight: "700",
   },
-  cardBottom: {
-    marginTop: 12,
+  filterTextActive: {
+    color: "#F8FAFC",
+  },
+  listContent: {
+    paddingBottom: 32,
+    gap: 12,
+  },
+  rowCard: {
+    borderRadius: 18,
+    backgroundColor: "rgba(15,23,42,0.88)",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.14)",
+    padding: 16,
+  },
+  rowTop: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
   },
-  time: {
-    color: "#64748B",
+  rowIdentity: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    flex: 1,
+  },
+  rowMeta: {
+    flex: 1,
+  },
+  rowName: {
+    color: "#F8FAFC",
+    fontSize: 16,
+    fontWeight: "800",
+  },
+  rowStatus: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  statusPositive: {
+    color: "#34D399",
+  },
+  statusNegative: {
+    color: "#FB7185",
+  },
+  statusNeutral: {
+    color: "#94A3B8",
+  },
+  chipsWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 14,
+  },
+  groupChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radius.full,
+    backgroundColor: "rgba(30,41,59,0.8)",
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.12)",
+  },
+  groupChipEmoji: {
     fontSize: 12,
   },
-  group: {
+  groupChipText: {
     color: "#CBD5E1",
     fontSize: 12,
     fontWeight: "600",
   },
+  actionPressable: {
+    alignSelf: "flex-start",
+  },
+  actionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+  },
+  remindButton: {
+    backgroundColor: "rgba(52,211,153,0.16)",
+    borderColor: "rgba(52,211,153,0.32)",
+  },
+  payButton: {
+    backgroundColor: "rgba(251,113,133,0.16)",
+    borderColor: "rgba(251,113,133,0.32)",
+  },
+  actionText: {
+    color: "#F8FAFC",
+    fontSize: 12,
+    fontWeight: "800",
+  },
   emptyState: {
     alignItems: "center",
-    marginTop: 80,
-    paddingHorizontal: 24,
+    justifyContent: "center",
+    paddingTop: 90,
+    paddingHorizontal: spacing.xl,
   },
   emptyTitle: {
     color: "#F8FAFC",
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: fontSize.lg,
+    fontWeight: "800",
+    marginTop: 14,
   },
   emptyText: {
     color: "#94A3B8",
-    fontSize: 14,
-    marginTop: 8,
+    fontSize: fontSize.sm,
     textAlign: "center",
+    marginTop: 8,
+    lineHeight: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(2,6,23,0.75)",
+    justifyContent: "flex-end",
+  },
+  modalSheet: {
+    backgroundColor: "#0F172A",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 32,
+    borderTopWidth: 1,
+    borderColor: "rgba(148,163,184,0.14)",
+  },
+  modalHandle: {
+    alignSelf: "center",
+    width: 44,
+    height: 5,
+    borderRadius: radius.full,
+    backgroundColor: "rgba(148,163,184,0.24)",
+    marginBottom: 18,
+  },
+  modalTitle: {
+    color: "#F8FAFC",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  modalBody: {
+    color: "#CBD5E1",
+    fontSize: 14,
+    lineHeight: 22,
+    marginTop: 8,
+    marginBottom: 22,
+  },
+  modalPrimaryButton: {
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: "rgba(124,58,237,0.86)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  modalPrimaryText: {
+    color: "#F8FAFC",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  modalSecondaryButton: {
+    height: 46,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(148,163,184,0.16)",
+    backgroundColor: "rgba(15,23,42,0.6)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalSecondaryText: {
+    color: "#CBD5E1",
+    fontSize: 14,
+    fontWeight: "700",
   },
 });
