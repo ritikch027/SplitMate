@@ -75,6 +75,7 @@ export const calculatePerUserBalances = (
   expenses = [],
   currentUserId,
   members = [],
+  settlements = [],
 ) => {
   const memberLookup = buildMemberLookup(members);
   const balances = {};
@@ -165,17 +166,71 @@ export const calculatePerUserBalances = (
     balances[payerId].sharedExpenses += 1;
   });
 
+  settlements.forEach((settlement) => {
+    const amount = roundAmount(settlement?.amount);
+    if (!amount) return;
+
+    if (settlement?.paidBy === currentUserId && settlement?.paidTo) {
+      const receiverId = settlement.paidTo;
+      if (!balances[receiverId]) {
+        const member = memberLookup[receiverId];
+        balances[receiverId] = {
+          userId: receiverId,
+          name: getMemberName(member),
+          phone: getMemberPhone(member),
+          photoUrl: getMemberPhoto(member),
+          upiId: getMemberUpiId(member),
+          netBalance: 0,
+          totalOwedToYou: 0,
+          totalYouOwe: 0,
+          sharedExpenses: 0,
+        };
+      }
+
+      balances[receiverId].netBalance = roundAmount(
+        balances[receiverId].netBalance + amount,
+      );
+      return;
+    }
+
+    if (settlement?.paidTo === currentUserId && settlement?.paidBy) {
+      const payerId = settlement.paidBy;
+      if (!balances[payerId]) {
+        const member = memberLookup[payerId];
+        balances[payerId] = {
+          userId: payerId,
+          name: getMemberName(member),
+          phone: getMemberPhone(member),
+          photoUrl: getMemberPhoto(member),
+          upiId: getMemberUpiId(member),
+          netBalance: 0,
+          totalOwedToYou: 0,
+          totalYouOwe: 0,
+          sharedExpenses: 0,
+        };
+      }
+
+      balances[payerId].netBalance = roundAmount(
+        balances[payerId].netBalance - amount,
+      );
+    }
+  });
+
   return Object.values(balances).map((entry) => ({
     ...entry,
     netBalance: roundAmount(entry.netBalance),
-    totalOwedToYou: roundAmount(entry.totalOwedToYou),
-    totalYouOwe: roundAmount(entry.totalYouOwe),
+    totalOwedToYou: roundAmount(Math.max(entry.netBalance, 0)),
+    totalYouOwe: roundAmount(Math.max(entry.netBalance * -1, 0)),
   }));
 };
 
 // Backwards-compatible alias used by older screens.
-export const calculateBalances = (expenses, members, currentUserId) =>
-  calculatePerUserBalances(expenses, currentUserId, members);
+export const calculateBalances = (
+  expenses,
+  members,
+  currentUserId,
+  settlements = [],
+) => calculatePerUserBalances(expenses, currentUserId, members, settlements);
 
 export const simplifyDebts = (balances = []) => {
   const creditors = [];

@@ -15,6 +15,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import Animated, { FadeInDown, FadeInUp } from "react-native-reanimated";
+import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AnimatedBackdrop from "../components/AnimatedBackdrop";
@@ -35,6 +36,7 @@ import {
   getGroup,
   removeMemberFromGroup,
 } from "../services/groupService";
+import { getSettlements } from "../services/balanceService";
 import { getUsersByIds, getUsersByPhone } from "../services/userService";
 import { formatRecentTimestamp } from "../utils/dateTime";
 
@@ -139,6 +141,7 @@ export default function GroupDetailsScreen({ navigation, route }) {
   const [group, setGroup] = useState(null);
   const [members, setMembers] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [settlements, setSettlements] = useState([]);
   const [manageVisible, setManageVisible] = useState(false);
   const [memberPhone, setMemberPhone] = useState("");
   const [memberSaving, setMemberSaving] = useState(false);
@@ -162,11 +165,29 @@ export default function GroupDetailsScreen({ navigation, route }) {
     return unsubscribe;
   }, [groupId]);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      let active = true;
+
+      const loadSettlements = async () => {
+        const result = await getSettlements(groupId);
+        if (!active || !result.success) return;
+        setSettlements(result.settlements || []);
+      };
+
+      loadSettlements();
+
+      return () => {
+        active = false;
+      };
+    }, [groupId]),
+  );
+
   /* Balance calculations */
   const balances = useMemo(() => {
     if (!user || !members.length) return [];
-    return calculateBalances(expenses, members, user.uid);
-  }, [expenses, members, user]);
+    return calculateBalances(expenses, members, user.uid, settlements);
+  }, [expenses, members, settlements, user]);
 
   const totals = useMemo(() => {
     let owed = 0,

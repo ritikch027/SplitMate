@@ -32,6 +32,7 @@ import {
   getUserExpenses,
   getUserExpensesOnce,
 } from "../services/expenseService";
+import { getSettlements } from "../services/balanceService";
 import { getUserGroups, getUserGroupsOnce } from "../services/groupService";
 import { getUserNotifications } from "../services/notificationService";
 import { getUsersByIds } from "../services/userService";
@@ -57,6 +58,7 @@ export default function HomeScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [allExpenses, setAllExpenses] = useState([]);
+  const [settlementsByGroup, setSettlementsByGroup] = useState({});
   const [memberProfilesById, setMemberProfilesById] = useState({});
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
@@ -120,6 +122,7 @@ export default function HomeScreen({ navigation }) {
   useEffect(() => {
     if (!groups.length) {
       setMemberProfilesById({});
+      setSettlementsByGroup({});
       return;
     }
 
@@ -140,6 +143,39 @@ export default function HomeScreen({ navigation }) {
     loadMemberProfiles();
   }, [groups]);
 
+  useEffect(() => {
+    if (!groups.length) {
+      setSettlementsByGroup({});
+      return;
+    }
+
+    let active = true;
+
+    const loadSettlements = async () => {
+      const results = await Promise.all(
+        groups.map(async (group) => ({
+          groupId: group.id,
+          result: await getSettlements(group.id),
+        })),
+      );
+
+      if (!active) return;
+
+      const nextSettlements = results.reduce((acc, entry) => {
+        acc[entry.groupId] = entry.result.success ? entry.result.settlements || [] : [];
+        return acc;
+      }, {});
+
+      setSettlementsByGroup(nextSettlements);
+    };
+
+    loadSettlements();
+
+    return () => {
+      active = false;
+    };
+  }, [groups]);
+
   const filteredGroups = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return groups;
@@ -153,14 +189,20 @@ export default function HomeScreen({ navigation }) {
     // Aggregate all balances across groups
     const allBalances = groups.flatMap((group) => {
       const groupExpenses = allExpenses.filter((e) => e.groupId === group.id);
-      return calculateBalances(groupExpenses, group.members || [], user.uid);
+      const groupSettlements = settlementsByGroup[group.id] || [];
+      return calculateBalances(
+        groupExpenses,
+        group.members || [],
+        user.uid,
+        groupSettlements,
+      );
     });
 
     return {
       owed: getTotalOwed(allBalances),
       owe: getTotalOwe(allBalances),
     };
-  }, [allExpenses, groups, user?.uid]);
+  }, [allExpenses, groups, settlementsByGroup, user?.uid]);
 
   const renderGroup = ({ item, index }) => {
     const groupExpenses = allExpenses.filter((e) => e.groupId === item.id);
@@ -168,6 +210,7 @@ export default function HomeScreen({ navigation }) {
       groupExpenses,
       item.members || [],
       user.uid,
+      settlementsByGroup[item.id] || [],
     );
     const balanceAmount = groupBalances.reduce(
       (sum, b) => sum + b.netBalance,

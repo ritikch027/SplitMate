@@ -59,6 +59,66 @@ const getInitialFilter = (mode) => {
   return "all";
 };
 
+const buildSettlementPlan = (balance) => {
+  const groupBalances = Array.isArray(balance?.groupBalances) ? balance.groupBalances : [];
+  const plan = groupBalances
+    .filter((groupBalance) => Number(groupBalance?.netBalance || 0) < 0)
+    .map((groupBalance) => ({
+      groupId: groupBalance.groupId,
+      groupName: groupBalance.groupName || "your group",
+      amount: Math.abs(Number(groupBalance.netBalance || 0)),
+    }))
+    .filter((item) => item.groupId && item.amount > 0);
+
+  if (plan.length > 0) {
+    return plan;
+  }
+
+  const fallbackGroupId = balance?.latestGroupId || balance?.sharedGroups?.[0]?.id || null;
+  const fallbackAmount = Math.abs(Number(balance?.netBalance || 0));
+  if (!fallbackGroupId || fallbackAmount <= 0) {
+    return [];
+  }
+
+  return [
+    {
+      groupId: fallbackGroupId,
+      groupName: balance?.latestGroupName || balance?.sharedGroups?.[0]?.name || "your group",
+      amount: fallbackAmount,
+    },
+  ];
+};
+
+const buildReminderPlan = (balance) => {
+  const groupBalances = Array.isArray(balance?.groupBalances) ? balance.groupBalances : [];
+  const plan = groupBalances
+    .filter((groupBalance) => Number(groupBalance?.netBalance || 0) > 0)
+    .map((groupBalance) => ({
+      groupId: groupBalance.groupId,
+      groupName: groupBalance.groupName || "your group",
+      amount: Number(groupBalance.netBalance || 0),
+    }))
+    .filter((item) => item.groupId && item.amount > 0);
+
+  if (plan.length > 0) {
+    return plan;
+  }
+
+  const fallbackGroupId = balance?.latestGroupId || balance?.sharedGroups?.[0]?.id || null;
+  const fallbackAmount = Number(balance?.netBalance || 0);
+  if (!fallbackGroupId || fallbackAmount <= 0) {
+    return [];
+  }
+
+  return [
+    {
+      groupId: fallbackGroupId,
+      groupName: balance?.latestGroupName || balance?.sharedGroups?.[0]?.name || "your group",
+      amount: fallbackAmount,
+    },
+  ];
+};
+
 function SummaryCard({ label, value, tone = "neutral" }) {
   const valueStyle =
     tone === "positive"
@@ -238,25 +298,27 @@ export default function BalanceBreakdownScreen({ navigation, route }) {
           {
             text: "Yes",
             onPress: async () => {
-              const result = await recordSettlement(
-                pending.groupId,
-                user.uid,
-                pending.userId,
-                pending.amount,
-                {
-                  payerName:
-                    userProfile?.name || userProfile?.phone || user?.phoneNumber || "Someone",
-                  groupName: pending.groupName,
-                },
-              );
+              for (const settlement of pending.settlementsPlan || []) {
+                const result = await recordSettlement(
+                  settlement.groupId,
+                  user.uid,
+                  pending.userId,
+                  settlement.amount,
+                  {
+                    payerName:
+                      userProfile?.name || userProfile?.phone || user?.phoneNumber || "Someone",
+                    groupName: settlement.groupName,
+                  },
+                );
 
-              if (!result.success) {
-                showAlert({
-                  title: "Unable to record payment",
-                  message: result.error || "Please try again.",
-                  variant: "error",
-                });
-                return;
+                if (!result.success) {
+                  showAlert({
+                    title: "Unable to record payment",
+                    message: result.error || "Please try again.",
+                    variant: "error",
+                  });
+                  return;
+                }
               }
 
               showAlert({
@@ -292,36 +354,39 @@ export default function BalanceBreakdownScreen({ navigation, route }) {
 
   const handleSendReminder = async (balance) => {
     try {
-      const amount = Number(balance.netBalance || 0);
-      const groupName = balance.sharedGroups[0]?.name || "your group";
-      const groupId = balance.latestGroupId || balance.sharedGroups[0]?.id || null;
+      const reminderPlan = buildReminderPlan(balance);
+      const totalAmount = reminderPlan.reduce((sum, item) => sum + item.amount, 0);
+      let needsSmsFallback = false;
 
-      const result = await sendBalanceReminder(
-        balance,
-        {
-          uid: user?.uid,
-          name: userProfile?.name,
-          phone: userProfile?.phone,
-          phoneNumber: user?.phoneNumber,
-        },
-        amount,
-        groupId,
-        groupName,
-      );
+      for (const reminder of reminderPlan) {
+        const result = await sendBalanceReminder(
+          balance,
+          {
+            uid: user?.uid,
+            name: userProfile?.name,
+            phone: userProfile?.phone,
+            phoneNumber: user?.phoneNumber,
+          },
+          reminder.amount,
+          reminder.groupId,
+          reminder.groupName,
+        );
 
-      if (!result.success) {
-        showAlert({
-          title: "Unable to send reminder",
-          message: result.error || "Please try again.",
-          variant: "error",
-        });
-        return;
+        if (!result.success) {
+          showAlert({
+            title: "Unable to send reminder",
+            message: result.error || "Please try again.",
+            variant: "error",
+          });
+          return;
+        }
+
+        needsSmsFallback = needsSmsFallback || result.needsSmsFallback;
       }
 
-      if (result.needsSmsFallback && balance.phone) {
-        const smsUrl = `sms:${balance.phone}?body=${encodeURIComponent(
-          result.smsBody,
-        )}`;
+      if (needsSmsFallback && balance.phone) {
+        const smsBody = `Hey! You owe me ${formatCurrency(totalAmount)} on SplitMate. Please settle up.`;
+        const smsUrl = `sms:${balance.phone}?body=${encodeURIComponent(smsBody)}`;
         await Linking.openURL(smsUrl);
       }
 
@@ -350,9 +415,8 @@ export default function BalanceBreakdownScreen({ navigation, route }) {
 
   const handlePay = async (balance) => {
     try {
-      const amount = Math.abs(Number(balance.netBalance || 0));
-      const groupName = balance.sharedGroups[0]?.name || "your group";
-      const groupId = balance.latestGroupId || balance.sharedGroups[0]?.id || null;
+      const settlementsPlan = buildSettlementPlan(balance);
+      const amount = settlementsPlan.reduce((sum, item) => sum + item.amount, 0);
 
       if (!balance.upiId) {
         setManualSheet({
@@ -382,8 +446,7 @@ export default function BalanceBreakdownScreen({ navigation, route }) {
         userId: balance.userId,
         name: balance.name || balance.phone || "member",
         amount,
-        groupId,
-        groupName,
+        settlementsPlan,
       };
 
       await Linking.openURL(upiUrl);

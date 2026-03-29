@@ -106,7 +106,21 @@ export default function NotificationsScreen({ navigation }) {
 
   const handleOpenNotification = async (notification) => {
     if (!notification.read) {
-      await markNotificationAsRead(notification.id);
+      const result = await markNotificationAsRead(notification.id);
+      if (!result.success) {
+        showAlert({
+          title: "Unable to update",
+          message: result.error || "Please try again.",
+          variant: "error",
+        });
+        return;
+      }
+
+      setNotifications((current) =>
+        current.map((item) =>
+          item.id === notification.id ? { ...item, read: true } : item,
+        ),
+      );
     }
 
     navigateToNotificationTarget(navigation, notification);
@@ -122,7 +136,12 @@ export default function NotificationsScreen({ navigation }) {
         message: result.error || "Please try again.",
         variant: "error",
       });
+      return;
     }
+
+    setNotifications((current) =>
+      current.map((item) => (item.read ? item : { ...item, read: true })),
+    );
   };
 
   return (

@@ -43,7 +43,7 @@ export default function OTPScreen({ navigation, route }) {
   const inputs = useRef([]);
   const shake = useSharedValue(0);
 
-  const maskedPhone = `${phone.slice(0, 2)} •••• ${phone.slice(phone.length - 4)}`;
+  const maskedPhone = `${phone.slice(0, 5)} •••• ${phone.slice(phone.length - 4)}`;
 
   useEffect(() => {
     if (timer === 0) return;

@@ -10,7 +10,7 @@ import { createUser } from "./userService";
 let lastOtpPhoneNumber = null;
 let verifyAttemptCount = 0;
 
-const OTP_SEND_COOLDOWN_MS = 45 * 1000;
+const OTP_SEND_COOLDOWN_MS = 59 * 1000;
 const OTP_SEND_WINDOW_MS = 10 * 60 * 1000;
 const OTP_SEND_LIMIT = 5;
 const OTP_VERIFY_LIMIT = 6;
@@ -26,14 +26,11 @@ const normalizePhoneNumber = (phoneNumber) => {
   return `91${localDigits}`;
 };
 
-const sendOTPphone = (phoneNum) => {
-  return `+${phoneNum}`;
-};
-
 export const sendOTP = async (phoneNumber) => {
   try {
     const formattedNumber = normalizePhoneNumber(phoneNumber);
-    const verifyNum = sendOTPphone(formattedNumber);
+
+    const verifyNum = `+${formattedNumber}`;
 
     const cooldown = enforceCooldown(
       `otp-cooldown:${verifyNum}`,
@@ -108,7 +105,7 @@ export const verifyOTP = async (phoneNumber, otp) => {
     }
 
     const { data, error } = await supabase.auth.verifyOtp({
-      phone: sendOTPphone(formattedNumber),
+      phone: `+${formattedNumber}`,
       token: code,
       type: "sms",
     });

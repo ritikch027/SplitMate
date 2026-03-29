@@ -26,9 +26,28 @@ const mergeSharedGroup = (entry, group) => {
     entry.sharedGroups.push({
       id: group.id,
       name: group.name || "Group",
-      emoji: group.emoji || "👥",
+      emoji: group.emoji || "G",
     });
   }
+};
+
+const mergeGroupBalance = (entry, group, balance) => {
+  if (!group?.id) return;
+
+  const nextAmount = Number(balance?.netBalance || 0);
+  const existing = entry.groupBalances.find((item) => item.groupId === group.id);
+
+  if (existing) {
+    existing.netBalance = Number((existing.netBalance + nextAmount).toFixed(2));
+    return;
+  }
+
+  entry.groupBalances.push({
+    groupId: group.id,
+    groupName: group.name || "Group",
+    groupEmoji: group.emoji || "G",
+    netBalance: Number(nextAmount.toFixed(2)),
+  });
 };
 
 const mergeBalanceEntry = (target, incoming) => {
@@ -50,12 +69,14 @@ const createBaseAggregate = (balance) => ({
   phone: balance.phone,
   photoUrl: balance.photoUrl || "",
   upiId: balance.upiId || "",
-  netBalance: Number(balance.netBalance || 0),
-  totalOwedToYou: Number(balance.totalOwedToYou || 0),
-  totalYouOwe: Number(balance.totalYouOwe || 0),
-  sharedExpenses: Number(balance.sharedExpenses || 0),
+  netBalance: 0,
+  totalOwedToYou: 0,
+  totalYouOwe: 0,
+  sharedExpenses: 0,
   sharedGroups: [],
+  groupBalances: [],
   latestGroupId: null,
+  latestGroupName: "",
 });
 
 const getBalanceServiceErrorMessage = (
@@ -83,9 +104,10 @@ const createNotificationRecord = async (userId, actorId, payload) => {
 
 export const getUserBalancesInGroup = async (groupId, currentUserId) => {
   try {
-    const [expensesResult, groupsResult] = await Promise.all([
+    const [expensesResult, groupsResult, settlementsResult] = await Promise.all([
       getGroupExpensesOnce(groupId),
       getUserGroupsOnce(currentUserId),
+      getSettlements(groupId),
     ]);
 
     if (!expensesResult.success) {
@@ -94,6 +116,10 @@ export const getUserBalancesInGroup = async (groupId, currentUserId) => {
 
     if (!groupsResult.success) {
       throw new Error(groupsResult.error || "Unable to load groups.");
+    }
+
+    if (!settlementsResult.success) {
+      throw new Error(settlementsResult.error || "Unable to load settlements.");
     }
 
     const group = (groupsResult.groups || []).find((item) => item.id === groupId);
@@ -106,14 +132,25 @@ export const getUserBalancesInGroup = async (groupId, currentUserId) => {
       throw new Error(membersResult.error || "Unable to load group members.");
     }
 
+    const groupEmoji = group.emoji || "G";
     const balances = calculatePerUserBalances(
       expensesResult.expenses || [],
       currentUserId,
       membersResult.users || [],
+      settlementsResult.settlements || [],
     ).map((balance) => ({
       ...balance,
-      sharedGroups: [{ id: group.id, name: group.name || "Group", emoji: group.emoji || "👥" }],
+      sharedGroups: [{ id: group.id, name: group.name || "Group", emoji: groupEmoji }],
+      groupBalances: [
+        {
+          groupId: group.id,
+          groupName: group.name || "Group",
+          groupEmoji,
+          netBalance: Number(balance.netBalance || 0),
+        },
+      ],
       latestGroupId: group.id,
+      latestGroupName: group.name || "Group",
     }));
 
     return { success: true, balances };
@@ -142,8 +179,9 @@ export const getUserBalancesAcrossAllGroups = async (currentUserId) => {
       return { success: true, balances: [] };
     }
 
-    const [expensesResults, membersResult] = await Promise.all([
+    const [expensesResults, settlementsResults, membersResult] = await Promise.all([
       Promise.all(groups.map((group) => getGroupExpensesOnce(group.id))),
+      Promise.all(groups.map((group) => getSettlements(group.id))),
       getUsersByIds(
         [...new Set(groups.flatMap((group) => group.members || []))].filter(Boolean),
       ),
@@ -152,6 +190,11 @@ export const getUserBalancesAcrossAllGroups = async (currentUserId) => {
     const failedExpenseResult = expensesResults.find((result) => !result.success);
     if (failedExpenseResult) {
       throw new Error(failedExpenseResult.error || "Unable to load expenses.");
+    }
+
+    const failedSettlementResult = settlementsResults.find((result) => !result.success);
+    if (failedSettlementResult) {
+      throw new Error(failedSettlementResult.error || "Unable to load settlements.");
     }
 
     if (!membersResult.success) {
@@ -164,12 +207,14 @@ export const getUserBalancesAcrossAllGroups = async (currentUserId) => {
 
     groups.forEach((group, index) => {
       const groupExpenses = expensesResults[index]?.expenses || [];
+      const groupSettlements = settlementsResults[index]?.settlements || [];
       const memberIds = new Set(group.members || []);
       const groupMembers = members.filter((member) => memberIds.has(member.id));
       const perGroupBalances = calculatePerUserBalances(
         groupExpenses,
         currentUserId,
         groupMembers,
+        groupSettlements,
       );
 
       perGroupBalances.forEach((balance) => {
@@ -179,7 +224,12 @@ export const getUserBalancesAcrossAllGroups = async (currentUserId) => {
 
         mergeBalanceEntry(aggregate[balance.userId], balance);
         mergeSharedGroup(aggregate[balance.userId], groupLookup[group.id]);
-        aggregate[balance.userId].latestGroupId = group.id;
+        mergeGroupBalance(aggregate[balance.userId], groupLookup[group.id], balance);
+
+        if (!aggregate[balance.userId].latestGroupId) {
+          aggregate[balance.userId].latestGroupId = group.id;
+          aggregate[balance.userId].latestGroupName = group.name || "Group";
+        }
       });
     });
 
@@ -243,7 +293,7 @@ export const recordSettlement = async (
 
     await createNotificationRecord(receiverId, payerId, {
       type: "settlement",
-      title: "Payment Received 💰",
+      title: "Payment Received",
       message: `${payerName} paid you ${amountText}`,
       groupId,
       metadata: {
@@ -255,7 +305,7 @@ export const recordSettlement = async (
     });
 
     await sendPushNotificationsToUsers([receiverId], {
-      title: "Payment Received 💰",
+      title: "Payment Received",
       body: `${payerName} paid you ${amountText}`,
       data: {
         type: "settlement",
@@ -319,7 +369,7 @@ export const sendBalanceReminder = async (
       currentUser?.name || currentUser?.phone || currentUser?.phoneNumber || "Someone";
 
     const pushResult = await sendPushNotificationsToUsers([targetUser.userId], {
-      title: "Payment Reminder 💸",
+      title: "Payment Reminder",
       body: `${senderName} is waiting for ${formattedAmount}`,
       data: {
         type: "payment_reminder",
@@ -330,7 +380,7 @@ export const sendBalanceReminder = async (
 
     await createNotificationRecord(targetUser.userId, currentUser?.uid, {
       type: "payment_reminder",
-      title: "Payment Reminder 💸",
+      title: "Payment Reminder",
       message: `${senderName} is waiting for ${formattedAmount}`,
       groupId,
       metadata: {
@@ -345,7 +395,7 @@ export const sendBalanceReminder = async (
       success: true,
       sentPush: Number(pushResult?.sent || 0),
       needsSmsFallback: Number(pushResult?.sent || 0) === 0,
-      smsBody: `Hey! You owe me ${formattedAmount} on SplitMate. Please settle up 🙏`,
+      smsBody: `Hey! You owe me ${formattedAmount} on SplitMate. Please settle up.`,
     };
   } catch (error) {
     console.error("Send balance reminder error:", error);

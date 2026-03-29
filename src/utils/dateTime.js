@@ -55,6 +55,24 @@ export const formatRecentTimestamp = (value) => {
   return isSameDay(date, new Date()) ? formatTimeLabel(date) : formatDateLabel(date);
 };
 
+export const formatActivityTimeAgo = (value) => {
+  const date = parseDateTime(value);
+  if (!date) return "RECENTLY";
+
+  const diffMs = Date.now() - date.getTime();
+  if (diffMs < 60 * 1000) return "JUST NOW";
+
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  if (diffHours < 24) {
+    return `${diffHours} HOUR${diffHours === 1 ? "" : "S"} AGO`;
+  }
+
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return "YESTERDAY";
+
+  return `${diffDays} DAYS AGO`;
+};
+
 export const formatActivitySectionLabel = (value) => {
   const date = parseDateTime(value);
   if (!date) return "Recently";

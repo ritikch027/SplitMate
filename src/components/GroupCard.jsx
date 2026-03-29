@@ -8,24 +8,10 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { colors, fontSize, spacing } from "../constants/theme";
+import { formatActivityTimeAgo } from "../utils/dateTime";
 import MemberAvatar from "./MemberAvatar";
 
 const ICON_COLORS = ["#7C3AED", "#5B8CFF", "#F59E0B", "#4f7b6c", "#EC4899"];
-
-const formatTimeAgo = (timestamp) => {
-  if (!timestamp?.toDate) return "RECENTLY";
-
-  const diff = Date.now() - timestamp.toDate().getTime();
-  const hours = Math.floor(diff / (1000 * 60 * 60));
-
-  if (hours < 1) return "JUST NOW";
-  if (hours < 24) return `${hours} HOURS AGO`;
-
-  const days = Math.floor(hours / 24);
-  if (days === 1) return "YESTERDAY";
-
-  return `${days} DAYS AGO`;
-};
 
 export default function GroupCard({ group, userBalance = 0, onPress }) {
   const scale = useSharedValue(1);
@@ -111,7 +97,9 @@ export default function GroupCard({ group, userBalance = 0, onPress }) {
           <View style={[styles.balanceChip, chipStyle]}>
             <Text style={styles.balanceText}>{balanceText}</Text>
           </View>
-          <Text style={styles.activityText}>{formatTimeAgo(group.lastActivity)}</Text>
+          <Text style={styles.activityText}>
+            {formatActivityTimeAgo(group.lastActivity || group.createdAt)}
+          </Text>
         </View>
       </Animated.View>
     </TouchableWithoutFeedback>
