@@ -1,146 +1,178 @@
-# SplitMate
 
-SplitMate is a mobile-first expense sharing app built with Expo, React Native, and Supabase for splitting bills, tracking balances, and settling group expenses with less friction.
+---
 
-It is designed around a familiar real-world problem: trips, roommates, shared meals, and friend groups create messy money trails. SplitMate turns that into a cleaner flow with group creation, flexible expense splits, balance tracking, reminders, and settlement support in one app.
+# 🚀 SplitMate
 
-## Why This Project Stands Out
+**SplitMate** is a mobile-first expense sharing app that simplifies how groups manage money—whether it’s trips, roommates, or shared daily expenses.
 
-- Built as a full-stack mobile product, not just a UI demo.
-- Uses Supabase for auth, realtime data, database storage, and backend functions.
-- Supports OTP-based sign-in, push notifications, balance calculations, and settlement flows.
-- Solves a real consumer product use case with meaningful app architecture behind it.
+Built with **Expo, React Native, and Supabase**, it combines intuitive UX with solid backend architecture to turn messy financial interactions into a smooth, trackable flow.
 
-## Core Features
+---
 
-- Create and manage shared expense groups.
-- Add expenses with equal or custom splits.
-- Track who paid, who owes, and who should receive money back.
-- View group-level balances and an overall balance breakdown across all groups.
-- Record settlements and reflect them in balance calculations.
-- Invite members using phone numbers.
-- Send reminders for pending payments.
-- Receive in-app and push notifications for expense and group activity.
-- Support UPI-based settlement flows and payment context.
+## 💡 The Problem
 
-## Product Walkthrough
+Group expenses are chaotic:
 
-### Authentication
+* “Who paid last time?”
+* “How much do I owe?”
+* “Did you already send me that?”
 
-- Phone number login with OTP verification.
-- Session-aware auth handling with rate limiting and resend cooldown logic.
+SplitMate removes that confusion by creating a **single source of truth for shared finances**.
 
-### Group Expense Flow
+---
 
-- Create a group for a trip, flat, event, or recurring shared context.
-- Add members and manage group participation.
-- Log expenses with category, payer, amount, and split strategy.
-- Review recent activity and per-member balances inside each group.
+## ✨ What Makes SplitMate Stand Out
 
-### Balance & Settlement Flow
+* 📱 **Real product, not a demo** — full-stack, production-style mobile app
+* ⚡ **Realtime architecture** — updates reflect instantly across users
+* 🔐 **OTP-based authentication** — frictionless onboarding
+* 🧠 **Non-trivial business logic** — balances, settlements, and split calculations
+* 🔔 **Push + in-app notifications** — keeps users engaged and accountable
 
-- See how much you owe and how much others owe you.
-- View balances aggregated across all groups.
-- Record settlements after payment and automatically update outstanding amounts.
-- Trigger reminders for unpaid balances.
+---
 
-## Tech Stack
+## 🔑 Core Features
 
-- `Expo`
-- `React Native`
-- `Expo Router`
-- `React Navigation`
-- `Supabase`
-- `Expo Notifications`
-- `React Native Reanimated`
+### 👥 Group Management
 
-## Architecture Snapshot
+* Create groups for trips, flats, or events
+* Add members via phone numbers
+* Manage participation dynamically
 
-```text
-app/                  Expo entry points and app shell
-src/screens/          Product screens and flows
-src/components/       Shared UI components
-src/services/         Auth, expenses, groups, balances, notifications
-src/context/          Global providers and session state
-src/utils/            Shared helpers and formatting logic
-supabase/migrations/  Database schema evolution
-supabase/functions/   Backend edge functions
+### 💸 Expense Tracking
+
+* Add expenses with:
+
+  * Equal splits
+  * Custom splits
+* Track payer vs participants
+* Categorize and review spending
+
+### 📊 Smart Balances
+
+* See who owes whom in real time
+* Group-level and overall balance views
+* Clear net settlement insights
+
+### ✅ Settlements
+
+* Record payments and auto-adjust balances
+* Maintain clean financial history
+
+### 🔔 Notifications & Reminders
+
+* Payment reminders
+* Activity updates
+* Push + in-app alerts
+
+---
+
+## 🔄 User Flow Overview
+
+### 🔐 Authentication
+
+* Phone number login with OTP
+* Session persistence
+* Rate limiting + resend cooldown
+
+### 🧾 Expense Lifecycle
+
+1. Create a group
+2. Add members
+3. Log expenses
+4. Auto-calculate balances
+
+---
+
+## 🛠 Tech Stack
+
+* **Frontend:** Expo, React Native
+* **Navigation:** Expo Router, React Navigation
+* **Backend:** Supabase (Auth, DB, Realtime, Edge Functions)
+* **Animations:** React Native Reanimated
+* **Notifications:** Expo Notifications
+
+---
+
+## 🧱 Architecture Snapshot
+
+```
+app/                  → Expo entry & routing
+src/screens/          → App screens & flows
+src/components/       → Reusable UI components
+src/services/         → Business logic (auth, expenses, balances)
+src/context/          → Global state & session management
+src/utils/            → Helpers & formatting
+supabase/migrations/  → Database schema
+supabase/functions/   → Edge/backend logic
 ```
 
-## Highlights For Recruiters
+---
 
-- Product-oriented engineering:
-  the app combines user flows, state management, backend integration, and domain logic around a clear financial use case.
+## 🧠 Engineering Highlights
 
-- Realtime thinking:
-  groups, expenses, and notifications are designed around live updates rather than static CRUD alone.
+* **Domain-driven logic:**
+  Expense splitting, netting, and settlement flows are handled with structured logic—not shortcuts.
 
-- Business logic beyond UI:
-  expense splitting, net balances, settlement adjustment, and reminder handling all require non-trivial application logic.
+* **Realtime-first mindset:**
+  Designed for live collaboration, not static CRUD apps.
 
-- Mobile app maturity:
-  includes OTP auth, notification handling, navigation flows, environment config, and deployment-ready Expo structure.
+* **Full-stack ownership:**
+  Covers frontend UX, backend design, and infra considerations.
 
-## Local Setup
+* **Mobile production patterns:**
+  Auth flows, notifications, navigation, and environment configs are handled cleanly.
 
-1. Install dependencies.
+---
+
+## ⚙️ Local Setup
 
 ```bash
 npm install
-```
-
-2. Start the Expo dev server.
-
-```bash
 npx expo start
 ```
 
-3. Run on your preferred platform.
+Run on:
 
 ```bash
 npm run android
-```
-
-```bash
 npm run ios
-```
-
-```bash
 npm run web
 ```
 
-## Environment Notes
+---
 
-- Supabase keys are loaded from local environment variables.
-- Android Firebase config is expected at `android/app/google-services.json`.
-- Secrets and service credentials should never be committed to GitHub.
+## 🔐 Environment Notes
 
-## Current Technical Scope
+* Uses Supabase environment variables
+* Firebase config required for Android notifications
+* Secrets are excluded from version control
 
-- OTP authentication
-- Group creation and member management
-- Expense creation, editing, and deletion
-- Equal and custom split handling
-- Group and overall balance calculations
-- Settlement recording
-- Push and in-app notifications
-- Supabase migrations and edge-function support
+---
 
-## Development
+## 📈 Roadmap
 
-Run lint checks with:
+* 📒 Personal expense tracking (non-group)
+* 📊 Spending insights & analytics
+* 📊 UPI integration to support settlements.
+* 🧾 Settlement history with proofs
+* ✨ Improved onboarding experience
 
-```bash
-npm run lint
-```
+---
 
-## Roadmap
+## 📌 Why This Project Matters
 
-- Personal ledger support for non-group contacts
-- Richer settlement history and payment proof
-- Better analytics and spending insights
-- More polished onboarding and collaboration flows
+SplitMate isn’t just a UI project—it demonstrates:
 
-## License
+* Product thinking
+* Real-world problem solving
+* Scalable app architecture
+* Clean separation of concerns
 
-This project is currently private and does not yet define a public license.
+---
+
+## 📄 License
+
+Currently private — license to be defined before public release.
+
+---
