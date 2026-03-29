@@ -4,10 +4,10 @@
 |--------------------------------------------------------------------------
 | Pure balance helpers shared across the app.
 |
-| Positive balance:
+| Positive netBalance:
 |   The other person owes the current user.
 |
-| Negative balance:
+| Negative netBalance:
 |   The current user owes the other person.
 */
 
@@ -42,11 +42,17 @@ const buildMemberLookup = (members = []) =>
   members.reduce((acc, member) => {
     const memberId = getMemberId(member);
     if (!memberId) return acc;
-
     acc[memberId] = member;
     return acc;
   }, {});
 
+/*
+|--------------------------------------------------------------------------
+| getExpenseShareForUser
+|--------------------------------------------------------------------------
+| Returns how much a user owes for a specific expense.
+| Checks for custom splits first, falls back to equal split.
+*/
 export const getExpenseShareForUser = (expense, userId) => {
   const customShare = Number(expense?.splits?.[userId]);
 
@@ -58,9 +64,7 @@ export const getExpenseShareForUser = (expense, userId) => {
     ? expense.splitBetween.length
     : 0;
 
-  if (!participantCount) {
-    return 0;
-  }
+  if (!participantCount) return 0;
 
   return roundAmount(Number(expense?.amount || 0) / participantCount);
 };
@@ -70,6 +74,9 @@ export const getExpenseShareForUser = (expense, userId) => {
 | calculatePerUserBalances
 |--------------------------------------------------------------------------
 | Aggregates balances between the current user and every other member.
+|
+| Returns one entry PER PERSON (not per group).
+| Settlements are factored in to reduce outstanding balances.
 */
 export const calculatePerUserBalances = (
   expenses = [],
@@ -80,6 +87,7 @@ export const calculatePerUserBalances = (
   const memberLookup = buildMemberLookup(members);
   const balances = {};
 
+  // Pre-populate all known members
   members.forEach((member) => {
     const memberId = getMemberId(member);
     if (!memberId || memberId === currentUserId) return;
@@ -97,16 +105,17 @@ export const calculatePerUserBalances = (
     };
   });
 
+  // Process expenses
   expenses.forEach((expense) => {
     const splitBetween = Array.isArray(expense?.splitBetween)
       ? expense.splitBetween.filter(Boolean)
       : [];
 
-    if (!splitBetween.length || !splitBetween.includes(currentUserId)) {
-      return;
-    }
+    // Skip if current user is not involved
+    if (!splitBetween.length || !splitBetween.includes(currentUserId)) return;
 
     if (expense.paidBy === currentUserId) {
+      // Current user paid — everyone else owes them their share
       splitBetween.forEach((userId) => {
         if (userId === currentUserId) return;
 
@@ -129,15 +138,13 @@ export const calculatePerUserBalances = (
         balances[userId].netBalance = roundAmount(
           balances[userId].netBalance + share,
         );
-        balances[userId].totalOwedToYou = roundAmount(
-          balances[userId].totalOwedToYou + share,
-        );
         balances[userId].sharedExpenses += 1;
       });
 
       return;
     }
 
+    // Someone else paid — current user owes them their share
     const payerId = expense.paidBy;
     if (!payerId || payerId === currentUserId) return;
 
@@ -160,17 +167,16 @@ export const calculatePerUserBalances = (
     balances[payerId].netBalance = roundAmount(
       balances[payerId].netBalance - share,
     );
-    balances[payerId].totalYouOwe = roundAmount(
-      balances[payerId].totalYouOwe + share,
-    );
     balances[payerId].sharedExpenses += 1;
   });
 
+  // Apply settlements to reduce outstanding balances
   settlements.forEach((settlement) => {
     const amount = roundAmount(settlement?.amount);
     if (!amount) return;
 
     if (settlement?.paidBy === currentUserId && settlement?.paidTo) {
+      // Current user paid someone → reduces what they owe that person
       const receiverId = settlement.paidTo;
       if (!balances[receiverId]) {
         const member = memberLookup[receiverId];
@@ -186,7 +192,7 @@ export const calculatePerUserBalances = (
           sharedExpenses: 0,
         };
       }
-
+      // Paying reduces negative balance (you owe less)
       balances[receiverId].netBalance = roundAmount(
         balances[receiverId].netBalance + amount,
       );
@@ -194,6 +200,7 @@ export const calculatePerUserBalances = (
     }
 
     if (settlement?.paidTo === currentUserId && settlement?.paidBy) {
+      // Someone paid current user → reduces what they owe current user
       const payerId = settlement.paidBy;
       if (!balances[payerId]) {
         const member = memberLookup[payerId];
@@ -209,13 +216,14 @@ export const calculatePerUserBalances = (
           sharedExpenses: 0,
         };
       }
-
+      // Receiving reduces positive balance (they owe you less)
       balances[payerId].netBalance = roundAmount(
         balances[payerId].netBalance - amount,
       );
     }
   });
 
+  // Finalize — compute totalOwedToYou and totalYouOwe from netBalance
   return Object.values(balances).map((entry) => ({
     ...entry,
     netBalance: roundAmount(entry.netBalance),
@@ -224,7 +232,12 @@ export const calculatePerUserBalances = (
   }));
 };
 
-// Backwards-compatible alias used by older screens.
+/*
+|--------------------------------------------------------------------------
+| calculateBalances
+|--------------------------------------------------------------------------
+| Backwards-compatible alias used by HomeScreen and GroupDetailsScreen.
+*/
 export const calculateBalances = (
   expenses,
   members,
@@ -232,6 +245,13 @@ export const calculateBalances = (
   settlements = [],
 ) => calculatePerUserBalances(expenses, currentUserId, members, settlements);
 
+/*
+|--------------------------------------------------------------------------
+| simplifyDebts
+|--------------------------------------------------------------------------
+| Minimizes number of transactions needed to settle all debts.
+| Classic debt simplification algorithm.
+*/
 export const simplifyDebts = (balances = []) => {
   const creditors = [];
   const debtors = [];
@@ -266,27 +286,41 @@ export const simplifyDebts = (balances = []) => {
   return transactions;
 };
 
+/*
+|--------------------------------------------------------------------------
+| Aggregate helpers
+|--------------------------------------------------------------------------
+*/
+
+// Total others owe you (sum of positive balances)
 export const getTotalOwed = (balances = []) =>
   roundAmount(
     balances
-      .filter((balance) => balance.netBalance > 0)
-      .reduce((sum, balance) => sum + balance.netBalance, 0),
+      .filter((b) => b.netBalance > 0)
+      .reduce((sum, b) => sum + b.netBalance, 0),
   );
 
+// Total you owe others (sum of negative balances, returned as positive)
 export const getTotalOwe = (balances = []) =>
   roundAmount(
     Math.abs(
       balances
-        .filter((balance) => balance.netBalance < 0)
-        .reduce((sum, balance) => sum + balance.netBalance, 0),
+        .filter((b) => b.netBalance < 0)
+        .reduce((sum, b) => sum + b.netBalance, 0),
     ),
   );
 
+// Net position across all balances
 export const getNetTotal = (balances = []) =>
-  roundAmount(
-    balances.reduce((sum, balance) => sum + Number(balance.netBalance || 0), 0),
-  );
+  roundAmount(balances.reduce((sum, b) => sum + Number(b.netBalance || 0), 0));
 
+/*
+|--------------------------------------------------------------------------
+| formatCurrency
+|--------------------------------------------------------------------------
+| Formats a number as Indian Rupee string.
+| Example: 100000 → ₹1,00,000
+*/
 export const formatCurrency = (amount) => {
   try {
     return new Intl.NumberFormat("en-IN", {
@@ -295,7 +329,7 @@ export const formatCurrency = (amount) => {
       minimumFractionDigits: 0,
       maximumFractionDigits: 2,
     }).format(Number(amount || 0));
-  } catch (_error) {
+  } catch {
     return `₹${Number(amount || 0)}`;
   }
 };

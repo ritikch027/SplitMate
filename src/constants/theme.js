@@ -37,7 +37,7 @@ export const fontSize = {
 
 export const surfaces = {
   screen: "#020617",
-  screenSoft: colors.bg,
+  screenSoft: "#0A0F1E",
   card: "rgba(15,23,42,0.88)",
   cardStrong: "rgba(15,23,42,0.94)",
   input: "rgba(15,23,42,0.72)",
@@ -52,15 +52,15 @@ export const surfaces = {
 export const buttonTokens = {
   height: 52,
   radius: 14,
-  primaryBg: colors.accent,
+  primaryBg: "#7C3AED",
   primaryText: "#FFFFFF",
-  secondaryBg: surfaces.input,
-  secondaryBorder: surfaces.border,
+  secondaryBg: "rgba(15,23,42,0.72)",
+  secondaryBorder: "rgba(148,163,184,0.16)",
   secondaryText: "#CBD5E1",
   dangerBg: "rgba(239,68,68,0.16)",
   dangerBorder: "rgba(239,68,68,0.28)",
   dangerText: "#F87171",
-  shadowColor: colors.accent,
+  shadowColor: "#7C3AED",
   shadowOpacity: 0.28,
   shadowRadius: 16,
   shadowOffset: { width: 0, height: 8 },

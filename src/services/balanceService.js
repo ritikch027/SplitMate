@@ -11,31 +11,83 @@ import { getUsersByIds } from "./userService";
 const SETTLEMENTS_TABLE = "settlements";
 const NOTIFICATIONS_TABLE = "notifications";
 
+/*
+|------------------------------------------------------------------
+| requireSession
+|------------------------------------------------------------------
+| Guards Edge Function invocations.
+| Returns session if ready, throws if not available within 3s.
+| Always call this before sendPushNotificationsToUsers.
+*/
+const requireSession = async () => {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (session?.access_token) return session;
+
+  return new Promise((resolve, reject) => {
+    let resolved = false;
+
+    const timeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        subscription.unsubscribe();
+        reject(new Error("Session not ready."));
+      }
+    }, 3000);
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (newSession?.access_token && !resolved) {
+        resolved = true;
+        clearTimeout(timeout);
+        subscription.unsubscribe();
+        resolve(newSession);
+      }
+    });
+  });
+};
+
+/*
+|------------------------------------------------------------------
+| safeSendPush
+|------------------------------------------------------------------
+| Wraps sendPushNotificationsToUsers with session guard.
+| Never throws — logs warning and skips if session not ready.
+*/
+const safeSendPush = async (userIds, payload) => {
+  try {
+    await requireSession();
+    await sendPushNotificationsToUsers(userIds, payload);
+  } catch (pushError) {
+    console.warn("Push notification skipped:", pushError.message);
+  }
+};
+
 const buildGroupLookup = (groups = []) =>
   groups.reduce((acc, group) => {
-    if (group?.id) {
-      acc[group.id] = group;
-    }
+    if (group?.id) acc[group.id] = group;
     return acc;
   }, {});
 
 const mergeSharedGroup = (entry, group) => {
   if (!group?.id) return;
-
   if (!entry.sharedGroups.some((item) => item.id === group.id)) {
     entry.sharedGroups.push({
       id: group.id,
       name: group.name || "Group",
-      emoji: group.emoji || "G",
+      emoji: group.emoji || "👥",
     });
   }
 };
 
 const mergeGroupBalance = (entry, group, balance) => {
   if (!group?.id) return;
-
   const nextAmount = Number(balance?.netBalance || 0);
-  const existing = entry.groupBalances.find((item) => item.groupId === group.id);
+  const existing = entry.groupBalances.find(
+    (item) => item.groupId === group.id,
+  );
 
   if (existing) {
     existing.netBalance = Number((existing.netBalance + nextAmount).toFixed(2));
@@ -45,7 +97,7 @@ const mergeGroupBalance = (entry, group, balance) => {
   entry.groupBalances.push({
     groupId: group.id,
     groupName: group.name || "Group",
-    groupEmoji: group.emoji || "G",
+    groupEmoji: group.emoji || "👥",
     netBalance: Number(nextAmount.toFixed(2)),
   });
 };
@@ -84,9 +136,8 @@ const getBalanceServiceErrorMessage = (
   fallback = "Balance service request failed.",
 ) => {
   if (error?.code === "PGRST205") {
-    return "The required Supabase table is missing. Run the latest migration and refresh the schema cache.";
+    return "Required Supabase table is missing. Run the latest migration.";
   }
-
   return error?.message || fallback;
 };
 
@@ -98,41 +149,37 @@ const createNotificationRecord = async (userId, actorId, payload) => {
     read: false,
     createdAt: new Date().toISOString(),
   });
-
   if (error) throw error;
 };
 
+/*
+|------------------------------------------------------------------
+| getUserBalancesInGroup
+|------------------------------------------------------------------
+| Returns per-user balances for a single group.
+*/
 export const getUserBalancesInGroup = async (groupId, currentUserId) => {
   try {
-    const [expensesResult, groupsResult, settlementsResult] = await Promise.all([
-      getGroupExpensesOnce(groupId),
-      getUserGroupsOnce(currentUserId),
-      getSettlements(groupId),
-    ]);
+    const [expensesResult, groupsResult, settlementsResult] = await Promise.all(
+      [
+        getGroupExpensesOnce(groupId),
+        getUserGroupsOnce(currentUserId),
+        getSettlements(groupId),
+      ],
+    );
 
-    if (!expensesResult.success) {
-      throw new Error(expensesResult.error || "Unable to load expenses.");
-    }
+    if (!expensesResult.success) throw new Error(expensesResult.error);
+    if (!groupsResult.success) throw new Error(groupsResult.error);
+    if (!settlementsResult.success) throw new Error(settlementsResult.error);
 
-    if (!groupsResult.success) {
-      throw new Error(groupsResult.error || "Unable to load groups.");
-    }
-
-    if (!settlementsResult.success) {
-      throw new Error(settlementsResult.error || "Unable to load settlements.");
-    }
-
-    const group = (groupsResult.groups || []).find((item) => item.id === groupId);
-    if (!group) {
-      throw new Error("Group not found.");
-    }
+    const group = (groupsResult.groups || []).find((g) => g.id === groupId);
+    if (!group) throw new Error("Group not found.");
 
     const membersResult = await getUsersByIds(group.members || []);
-    if (!membersResult.success) {
-      throw new Error(membersResult.error || "Unable to load group members.");
-    }
+    if (!membersResult.success) throw new Error(membersResult.error);
 
-    const groupEmoji = group.emoji || "G";
+    const groupEmoji = group.emoji || "👥";
+
     const balances = calculatePerUserBalances(
       expensesResult.expenses || [],
       currentUserId,
@@ -140,7 +187,9 @@ export const getUserBalancesInGroup = async (groupId, currentUserId) => {
       settlementsResult.settlements || [],
     ).map((balance) => ({
       ...balance,
-      sharedGroups: [{ id: group.id, name: group.name || "Group", emoji: groupEmoji }],
+      sharedGroups: [
+        { id: group.id, name: group.name || "Group", emoji: groupEmoji },
+      ],
       groupBalances: [
         {
           groupId: group.id,
@@ -160,46 +209,44 @@ export const getUserBalancesInGroup = async (groupId, currentUserId) => {
       success: false,
       error: getBalanceServiceErrorMessage(
         error,
-        "Failed to fetch balances for this group",
+        "Failed to fetch group balances",
       ),
     };
   }
 };
 
+/*
+|------------------------------------------------------------------
+| getUserBalancesAcrossAllGroups
+|------------------------------------------------------------------
+| Returns per-user balances merged across ALL groups.
+| Same person in multiple groups → one combined entry.
+| This is the source of truth for BalanceBreakdownScreen.
+*/
 export const getUserBalancesAcrossAllGroups = async (currentUserId) => {
   try {
     const groupsResult = await getUserGroupsOnce(currentUserId);
-
-    if (!groupsResult.success) {
-      throw new Error(groupsResult.error || "Unable to load groups.");
-    }
+    if (!groupsResult.success) throw new Error(groupsResult.error);
 
     const groups = groupsResult.groups || [];
-    if (!groups.length) {
-      return { success: true, balances: [] };
-    }
+    if (!groups.length) return { success: true, balances: [] };
 
-    const [expensesResults, settlementsResults, membersResult] = await Promise.all([
-      Promise.all(groups.map((group) => getGroupExpensesOnce(group.id))),
-      Promise.all(groups.map((group) => getSettlements(group.id))),
-      getUsersByIds(
-        [...new Set(groups.flatMap((group) => group.members || []))].filter(Boolean),
-      ),
-    ]);
+    const [expensesResults, settlementsResults, membersResult] =
+      await Promise.all([
+        Promise.all(groups.map((g) => getGroupExpensesOnce(g.id))),
+        Promise.all(groups.map((g) => getSettlements(g.id))),
+        getUsersByIds(
+          [...new Set(groups.flatMap((g) => g.members || []))].filter(Boolean),
+        ),
+      ]);
 
-    const failedExpenseResult = expensesResults.find((result) => !result.success);
-    if (failedExpenseResult) {
-      throw new Error(failedExpenseResult.error || "Unable to load expenses.");
-    }
+    const failedExpense = expensesResults.find((r) => !r.success);
+    if (failedExpense) throw new Error(failedExpense.error);
 
-    const failedSettlementResult = settlementsResults.find((result) => !result.success);
-    if (failedSettlementResult) {
-      throw new Error(failedSettlementResult.error || "Unable to load settlements.");
-    }
+    const failedSettlement = settlementsResults.find((r) => !r.success);
+    if (failedSettlement) throw new Error(failedSettlement.error);
 
-    if (!membersResult.success) {
-      throw new Error(membersResult.error || "Unable to load group members.");
-    }
+    if (!membersResult.success) throw new Error(membersResult.error);
 
     const members = membersResult.users || [];
     const aggregate = {};
@@ -209,7 +256,8 @@ export const getUserBalancesAcrossAllGroups = async (currentUserId) => {
       const groupExpenses = expensesResults[index]?.expenses || [];
       const groupSettlements = settlementsResults[index]?.settlements || [];
       const memberIds = new Set(group.members || []);
-      const groupMembers = members.filter((member) => memberIds.has(member.id));
+      const groupMembers = members.filter((m) => memberIds.has(m.id));
+
       const perGroupBalances = calculatePerUserBalances(
         groupExpenses,
         currentUserId,
@@ -224,7 +272,11 @@ export const getUserBalancesAcrossAllGroups = async (currentUserId) => {
 
         mergeBalanceEntry(aggregate[balance.userId], balance);
         mergeSharedGroup(aggregate[balance.userId], groupLookup[group.id]);
-        mergeGroupBalance(aggregate[balance.userId], groupLookup[group.id], balance);
+        mergeGroupBalance(
+          aggregate[balance.userId],
+          groupLookup[group.id],
+          balance,
+        );
 
         if (!aggregate[balance.userId].latestGroupId) {
           aggregate[balance.userId].latestGroupId = group.id;
@@ -233,27 +285,35 @@ export const getUserBalancesAcrossAllGroups = async (currentUserId) => {
       });
     });
 
-    const balances = Object.values(aggregate).sort((left, right) => {
-      const leftAbs = Math.abs(left.netBalance);
-      const rightAbs = Math.abs(right.netBalance);
-
-      if (rightAbs !== leftAbs) return rightAbs - leftAbs;
-      return left.name.localeCompare(right.name);
-    });
+    // Recalculate totalOwedToYou / totalYouOwe from final netBalance
+    const balances = Object.values(aggregate)
+      .map((entry) => ({
+        ...entry,
+        totalOwedToYou: Number(Math.max(entry.netBalance, 0).toFixed(2)),
+        totalYouOwe: Number(Math.max(entry.netBalance * -1, 0).toFixed(2)),
+      }))
+      .sort((a, b) => {
+        const diff = Math.abs(b.netBalance) - Math.abs(a.netBalance);
+        if (diff !== 0) return diff;
+        return a.name.localeCompare(b.name);
+      });
 
     return { success: true, balances };
   } catch (error) {
     console.error("Get user balances across all groups error:", error);
     return {
       success: false,
-      error: getBalanceServiceErrorMessage(
-        error,
-        "Failed to fetch balances across groups",
-      ),
+      error: getBalanceServiceErrorMessage(error, "Failed to fetch balances"),
     };
   }
 };
 
+/*
+|------------------------------------------------------------------
+| recordSettlement
+|------------------------------------------------------------------
+| Saves a settlement to Supabase and notifies the receiver.
+*/
 export const recordSettlement = async (
   groupId,
   payerId,
@@ -271,7 +331,7 @@ export const recordSettlement = async (
       throw new Error("Settlement amount must be greater than zero.");
     }
 
-    const settlementPayload = {
+    const payload = {
       groupId,
       paidBy: payerId,
       paidTo: receiverId,
@@ -281,37 +341,33 @@ export const recordSettlement = async (
 
     const { data, error } = await supabase
       .from(SETTLEMENTS_TABLE)
-      .insert(settlementPayload)
+      .insert(payload)
       .select("*")
       .single();
 
     if (error) throw error;
 
     const payerName = meta.payerName || "Someone";
-    const groupName = meta.groupName || "your group";
-    const amountText = formatCurrency(settlementPayload.amount);
+    const amountText = formatCurrency(payload.amount);
 
+    // Save in-app notification
     await createNotificationRecord(receiverId, payerId, {
       type: "settlement",
-      title: "Payment Received",
+      title: "Payment Received 💰",
       message: `${payerName} paid you ${amountText}`,
       groupId,
       metadata: {
-        amount: settlementPayload.amount,
+        amount: payload.amount,
         actorName: payerName,
-        groupName,
-        reason: "Settlement recorded",
+        groupName: meta.groupName || "your group",
       },
     });
 
-    await sendPushNotificationsToUsers([receiverId], {
-      title: "Payment Received",
+    // Send push notification (guarded — won't crash if session not ready)
+    await safeSendPush([receiverId], {
+      title: "Payment Received 💰",
       body: `${payerName} paid you ${amountText}`,
-      data: {
-        type: "settlement",
-        amount: settlementPayload.amount,
-        groupId,
-      },
+      data: { type: "settlement", amount: payload.amount, groupId },
     });
 
     await updateGroupActivity(groupId);
@@ -329,6 +385,12 @@ export const recordSettlement = async (
   }
 };
 
+/*
+|------------------------------------------------------------------
+| getSettlements
+|------------------------------------------------------------------
+| Fetches all settlements for a group.
+*/
 export const getSettlements = async (groupId) => {
   try {
     const { data, error } = await supabase
@@ -352,6 +414,13 @@ export const getSettlements = async (groupId) => {
   }
 };
 
+/*
+|------------------------------------------------------------------
+| sendBalanceReminder
+|------------------------------------------------------------------
+| Sends a push notification reminder to someone who owes you.
+| Falls back to SMS if push token not available.
+*/
 export const sendBalanceReminder = async (
   targetUser,
   currentUser,
@@ -366,45 +435,52 @@ export const sendBalanceReminder = async (
 
     const formattedAmount = formatCurrency(amount);
     const senderName =
-      currentUser?.name || currentUser?.phone || currentUser?.phoneNumber || "Someone";
+      currentUser?.name ||
+      currentUser?.phone ||
+      currentUser?.phoneNumber ||
+      "Someone";
 
-    const pushResult = await sendPushNotificationsToUsers([targetUser.userId], {
-      title: "Payment Reminder",
-      body: `${senderName} is waiting for ${formattedAmount}`,
-      data: {
-        type: "payment_reminder",
-        amount: Number(amount),
-        groupId,
-      },
-    });
-
-    await createNotificationRecord(targetUser.userId, currentUser?.uid, {
+    // Save in-app notification
+    await createNotificationRecord(targetUser.userId, currentUser?.id, {
       type: "payment_reminder",
-      title: "Payment Reminder",
+      title: "Payment Reminder 💸",
       message: `${senderName} is waiting for ${formattedAmount}`,
       groupId,
       metadata: {
         amount: Number(amount),
         actorName: senderName,
         groupName,
-        reason: "Settlement reminder",
       },
     });
 
+    // Send push (guarded)
+    let pushSent = 0;
+    try {
+      await requireSession();
+      const pushResult = await sendPushNotificationsToUsers(
+        [targetUser.userId],
+        {
+          title: "Payment Reminder 💸",
+          body: `${senderName} is waiting for ${formattedAmount}`,
+          data: { type: "payment_reminder", amount: Number(amount), groupId },
+        },
+      );
+      pushSent = Number(pushResult?.sent || 0);
+    } catch (pushError) {
+      console.warn("Push skipped:", pushError.message);
+    }
+
     return {
       success: true,
-      sentPush: Number(pushResult?.sent || 0),
-      needsSmsFallback: Number(pushResult?.sent || 0) === 0,
-      smsBody: `Hey! You owe me ${formattedAmount} on SplitMate. Please settle up.`,
+      sentPush: pushSent,
+      needsSmsFallback: pushSent === 0,
+      smsBody: `Hey! You owe me ${formattedAmount} on SplitMate. Please settle up 🙏`,
     };
   } catch (error) {
     console.error("Send balance reminder error:", error);
     return {
       success: false,
-      error: getBalanceServiceErrorMessage(
-        error,
-        "Failed to send reminder",
-      ),
+      error: getBalanceServiceErrorMessage(error, "Failed to send reminder"),
     };
   }
 };

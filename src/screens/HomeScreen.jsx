@@ -20,27 +20,43 @@ import AnimatedBackdrop from "../components/AnimatedBackdrop";
 import GroupCard from "../components/GroupCard";
 import MemberAvatar from "../components/MemberAvatar";
 import SkeletonLoader from "../components/SkeletonLoader";
-import { buttonTokens, colors, fontSize, spacing, surfaces } from "../constants/theme";
+import {
+  buttonTokens,
+  colors,
+  fontSize,
+  spacing,
+  surfaces,
+} from "../constants/theme";
 import { useAuth } from "../context/useAuth";
+import { getSettlements } from "../services/balanceService";
+import {
+  getUserExpenses,
+  getUserExpensesOnce,
+} from "../services/expenseService";
+import { getUserGroups, getUserGroupsOnce } from "../services/groupService";
+import { getUserNotifications } from "../services/notificationService";
+import { getUsersByIds } from "../services/userService";
 import {
   calculateBalances,
   formatCurrency,
   getTotalOwe,
   getTotalOwed,
-} from "../services/balanceCalculator";
-import {
-  getUserExpenses,
-  getUserExpensesOnce,
-} from "../services/expenseService";
-import { getSettlements } from "../services/balanceService";
-import { getUserGroups, getUserGroupsOnce } from "../services/groupService";
-import { getUserNotifications } from "../services/notificationService";
-import { getUsersByIds } from "../services/userService";
+} from "../utils/balanceCalculator";
 
+/*──────────────────────────────────────────────────────────────
+  StatCard
+──────────────────────────────────────────────────────────────*/
 function StatCard({ label, value, valueStyle, delay, onPress }) {
   return (
-    <Animated.View entering={FadeInDown.delay(delay).springify()} style={styles.statCardWrap}>
-      <TouchableOpacity activeOpacity={0.88} style={styles.statCard} onPress={onPress}>
+    <Animated.View
+      entering={FadeInDown.delay(delay).springify()}
+      style={styles.statCardWrap}
+    >
+      <TouchableOpacity
+        activeOpacity={0.88}
+        style={styles.statCard}
+        onPress={onPress}
+      >
         <Text style={styles.statLabel}>{label}</Text>
         <Text style={[styles.statValue, valueStyle]}>{value}</Text>
       </TouchableOpacity>
@@ -48,6 +64,9 @@ function StatCard({ label, value, valueStyle, delay, onPress }) {
   );
 }
 
+/*──────────────────────────────────────────────────────────────
+  HomeScreen
+──────────────────────────────────────────────────────────────*/
 export default function HomeScreen({ navigation }) {
   const { user, userProfile } = useAuth();
   const tabBarHeight = useBottomTabBarHeight();
@@ -62,36 +81,41 @@ export default function HomeScreen({ navigation }) {
   const [memberProfilesById, setMemberProfilesById] = useState({});
   const [unreadNotifications, setUnreadNotifications] = useState(0);
 
+  /*
+  |------------------------------------------------------------------
+  | One-time refresh (on focus + pull-to-refresh)
+  |------------------------------------------------------------------
+  */
   const loadLatestHomeData = React.useCallback(async () => {
     if (!user) return;
 
     const [groupsResult, expensesResult] = await Promise.all([
-      getUserGroupsOnce(user.uid),
-      getUserExpensesOnce(user.uid),
+      getUserGroupsOnce(user.id),
+      getUserExpensesOnce(user.id),
     ]);
 
-    if (groupsResult.success) {
-      setGroups(groupsResult.groups);
-    }
-
-    if (expensesResult.success) {
-      setAllExpenses(expensesResult.expenses);
-    }
+    if (groupsResult.success) setGroups(groupsResult.groups);
+    if (expensesResult.success) setAllExpenses(expensesResult.expenses);
 
     setLoading(false);
     setRefreshing(false);
   }, [user]);
 
+  /*
+  |------------------------------------------------------------------
+  | Real-time listeners
+  |------------------------------------------------------------------
+  */
   useEffect(() => {
-    if (!user) return undefined;
+    if (!user) return;
 
-    const unsubscribeGroups = getUserGroups(user.uid, (data) => {
+    const unsubscribeGroups = getUserGroups(user.id, (data) => {
       setGroups(data);
       setLoading(false);
       setRefreshing(false);
     });
 
-    const unsubscribeExpenses = getUserExpenses(user.uid, (expenses) => {
+    const unsubscribeExpenses = getUserExpenses(user.id, (expenses) => {
       setAllExpenses(expenses);
     });
 
@@ -101,35 +125,48 @@ export default function HomeScreen({ navigation }) {
     };
   }, [user]);
 
+  /*
+  |------------------------------------------------------------------
+  | Notifications listener
+  |------------------------------------------------------------------
+  */
   useEffect(() => {
-    if (!user) return undefined;
+    if (!user) return;
 
-    const unsubscribe = getUserNotifications(user.uid, (notifications) => {
-      setUnreadNotifications(
-        notifications.filter((item) => !item.read).length,
-      );
+    const unsubscribe = getUserNotifications(user.id, (notifications) => {
+      setUnreadNotifications(notifications.filter((item) => !item.read).length);
     });
 
     return unsubscribe;
   }, [user]);
 
+  /*
+  |------------------------------------------------------------------
+  | Refresh on screen focus
+  |------------------------------------------------------------------
+  */
   useFocusEffect(
     React.useCallback(() => {
       loadLatestHomeData();
     }, [loadLatestHomeData]),
   );
 
+  /*
+  |------------------------------------------------------------------
+  | Load member profiles when groups change
+  |------------------------------------------------------------------
+  */
   useEffect(() => {
     if (!groups.length) {
       setMemberProfilesById({});
-      setSettlementsByGroup({});
       return;
     }
 
     const loadMemberProfiles = async () => {
-      const memberIds = [...new Set(groups.flatMap((group) => group.members || []))];
+      const memberIds = [
+        ...new Set(groups.flatMap((group) => group.members || [])),
+      ];
       const result = await getUsersByIds(memberIds);
-
       if (!result.success) return;
 
       const nextProfiles = result.users.reduce((acc, profile) => {
@@ -143,6 +180,11 @@ export default function HomeScreen({ navigation }) {
     loadMemberProfiles();
   }, [groups]);
 
+  /*
+  |------------------------------------------------------------------
+  | Load settlements when groups change
+  |------------------------------------------------------------------
+  */
   useEffect(() => {
     if (!groups.length) {
       setSettlementsByGroup({});
@@ -162,7 +204,9 @@ export default function HomeScreen({ navigation }) {
       if (!active) return;
 
       const nextSettlements = results.reduce((acc, entry) => {
-        acc[entry.groupId] = entry.result.success ? entry.result.settlements || [] : [];
+        acc[entry.groupId] = entry.result.success
+          ? entry.result.settlements || []
+          : [];
         return acc;
       }, {});
 
@@ -176,42 +220,103 @@ export default function HomeScreen({ navigation }) {
     };
   }, [groups]);
 
+  /*
+  |------------------------------------------------------------------
+  | Search filter
+  |------------------------------------------------------------------
+  */
   const filteredGroups = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return groups;
-
     return groups.filter((group) => group.name?.toLowerCase().includes(term));
   }, [groups, search]);
 
+  /*
+  |------------------------------------------------------------------
+  | Totals calculation
+  |------------------------------------------------------------------
+  | KEY FIX: Aggregate per PERSON not per GROUP.
+  |
+  | Old code used flatMap → created duplicate entries for the same
+  | person across multiple groups → totals didn't match
+  | BalanceBreakdownScreen.
+  |
+  | New code merges balances per userId first (same logic as
+  | getUserBalancesAcrossAllGroups) → totals now match exactly.
+  |------------------------------------------------------------------
+  */
   const totals = useMemo(() => {
-    if (!allExpenses.length || !groups.length) return { owed: 0, owe: 0 };
+    if (!allExpenses.length || !groups.length) {
+      return { owed: 0, owe: 0 };
+    }
 
-    // Aggregate all balances across groups
-    const allBalances = groups.flatMap((group) => {
+    // Step 1 — aggregate net balance per person across all groups
+    const aggregate = {};
+
+    groups.forEach((group) => {
       const groupExpenses = allExpenses.filter((e) => e.groupId === group.id);
       const groupSettlements = settlementsByGroup[group.id] || [];
-      return calculateBalances(
+
+      // Resolve member objects from cached profiles
+      const memberIds = new Set(group.members || []);
+      const groupMembers = Object.values(memberProfilesById).filter((m) =>
+        memberIds.has(m.id),
+      );
+
+      // Fall back to raw IDs if profiles not loaded yet
+      const membersToUse =
+        groupMembers.length > 0 ? groupMembers : group.members || [];
+
+      const perGroupBalances = calculateBalances(
         groupExpenses,
-        group.members || [],
-        user.uid,
+        membersToUse,
+        user.id,
         groupSettlements,
       );
+
+      // Step 2 — merge into aggregate (one entry per person, not per group)
+      perGroupBalances.forEach((balance) => {
+        if (!aggregate[balance.userId]) {
+          aggregate[balance.userId] = { netBalance: 0 };
+        }
+        aggregate[balance.userId].netBalance = Number(
+          (aggregate[balance.userId].netBalance + balance.netBalance).toFixed(
+            2,
+          ),
+        );
+      });
     });
 
-    return {
-      owed: getTotalOwed(allBalances),
-      owe: getTotalOwe(allBalances),
-    };
-  }, [allExpenses, groups, settlementsByGroup, user?.uid]);
+    // Step 3 — compute totals from merged per-person balances
+    const mergedBalances = Object.values(aggregate);
 
+    return {
+      owed: getTotalOwed(mergedBalances),
+      owe: getTotalOwe(mergedBalances),
+    };
+  }, [allExpenses, groups, settlementsByGroup, memberProfilesById, user?.id]);
+
+  /*
+  |------------------------------------------------------------------
+  | Render group card
+  |------------------------------------------------------------------
+  */
   const renderGroup = ({ item, index }) => {
     const groupExpenses = allExpenses.filter((e) => e.groupId === item.id);
+    const memberIds = new Set(item.members || []);
+    const groupMembers = Object.values(memberProfilesById).filter((m) =>
+      memberIds.has(m.id),
+    );
+    const membersToUse =
+      groupMembers.length > 0 ? groupMembers : item.members || [];
+
     const groupBalances = calculateBalances(
       groupExpenses,
-      item.members || [],
-      user.uid,
+      membersToUse,
+      user.id,
       settlementsByGroup[item.id] || [],
     );
+
     const balanceAmount = groupBalances.reduce(
       (sum, b) => sum + b.netBalance,
       0,
@@ -237,8 +342,13 @@ export default function HomeScreen({ navigation }) {
     );
   };
 
+  /*──────────────────────────────────────────────────────────────
+    Render
+  ──────────────────────────────────────────────────────────────*/
   return (
-    <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) + 12 }]}>
+    <View
+      style={[styles.container, { paddingTop: Math.max(insets.top, 16) + 12 }]}
+    >
       <StatusBar barStyle="light-content" />
       <AnimatedBackdrop />
 
@@ -247,7 +357,10 @@ export default function HomeScreen({ navigation }) {
         keyExtractor={(item) => item.id}
         renderItem={renderGroup}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingBottom: tabBarHeight + 80 },
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -262,94 +375,106 @@ export default function HomeScreen({ navigation }) {
           loading ? (
             <SkeletonLoader variant="home" />
           ) : (
-          <>
-            <Animated.View
-              entering={FadeInDown.springify()}
-              style={styles.header}
-            >
-              <View>
-                <Text style={styles.kicker}>Split smarter, stay clear</Text>
-                <Text style={styles.greeting}>
-                  {userProfile?.name || userProfile?.phone || "SplitMate User"}
-                </Text>
+            <>
+              {/* ── Header ── */}
+              <Animated.View
+                entering={FadeInDown.springify()}
+                style={styles.header}
+              >
+                <View>
+                  <Text style={styles.kicker}>Split smarter, stay clear</Text>
+                  <Text style={styles.greeting}>
+                    {userProfile?.name ||
+                      userProfile?.phone ||
+                      "SplitMate User"}
+                  </Text>
+                </View>
+
+                <View style={styles.headerActions}>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => navigation.navigate("NotificationsScreen")}
+                    style={styles.notificationButton}
+                  >
+                    <Ionicons
+                      name="notifications-outline"
+                      size={21}
+                      color="#E2E8F0"
+                    />
+                    {unreadNotifications > 0 && (
+                      <View style={styles.notificationDot} />
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    onPress={() => navigation.navigate("Profile")}
+                    style={styles.profileButton}
+                  >
+                    <MemberAvatar
+                      name={userProfile?.name || userProfile?.phone || "User"}
+                      photoUrl={userProfile?.photoUrl}
+                      size="medium"
+                      showOnline
+                    />
+                  </TouchableOpacity>
+                </View>
+              </Animated.View>
+
+              {/* ── Search ── */}
+              <Animated.View
+                entering={FadeInDown.delay(110).springify()}
+                style={styles.searchWrap}
+              >
+                <Ionicons name="search" size={18} color="#657188" />
+                <TextInput
+                  value={search}
+                  onChangeText={setSearch}
+                  style={styles.searchInput}
+                  placeholder="Search groups or friends..."
+                  placeholderTextColor="#657188"
+                />
+              </Animated.View>
+
+              {/* ── Stats ── */}
+              <View style={styles.statsRow}>
+                <StatCard
+                  label="You are owed"
+                  value={formatCurrency(totals.owed)}
+                  valueStyle={styles.owedValue}
+                  delay={170}
+                  onPress={() =>
+                    navigation.navigate("BalanceBreakdownScreen", {
+                      mode: "owed",
+                    })
+                  }
+                />
+                <StatCard
+                  label="You owe"
+                  value={formatCurrency(totals.owe)}
+                  valueStyle={styles.oweValue}
+                  delay={240}
+                  onPress={() =>
+                    navigation.navigate("BalanceBreakdownScreen", {
+                      mode: "owe",
+                    })
+                  }
+                />
               </View>
 
-              <View style={styles.headerActions}>
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  onPress={() => navigation.navigate("NotificationsScreen")}
-                  style={styles.notificationButton}
-                >
-                  <Ionicons
-                    name="notifications-outline"
-                    size={21}
-                    color="#E2E8F0"
-                  />
-                  {unreadNotifications > 0 ? (
-                    <View style={styles.notificationDot} />
-                  ) : null}
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  onPress={() => navigation.navigate("Profile")}
-                  style={styles.profileButton}
-                >
-                  <MemberAvatar
-                    name={userProfile?.name || userProfile?.phone || "User"}
-                    photoUrl={userProfile?.photoUrl}
-                    size="medium"
-                    showOnline
-                  />
-                </TouchableOpacity>
-              </View>
-            </Animated.View>
-
-            <Animated.View
-              entering={FadeInDown.delay(110).springify()}
-              style={styles.searchWrap}
-            >
-              <Ionicons name="search" size={18} color="#657188" />
-              <TextInput
-                value={search}
-                onChangeText={setSearch}
-                style={styles.searchInput}
-                placeholder="Search groups or friends..."
-                placeholderTextColor="#657188"
-              />
-            </Animated.View>
-
-            <View style={styles.statsRow}>
-              <StatCard
-                label="You are owed"
-                value={formatCurrency(totals.owed)}
-                valueStyle={styles.owedValue}
-                delay={170}
-                onPress={() => navigation.navigate("BalanceBreakdownScreen", { mode: "owed" })}
-              />
-              <StatCard
-                label="You owe"
-                value={formatCurrency(totals.owe)}
-                valueStyle={styles.oweValue}
-                delay={240}
-                onPress={() => navigation.navigate("BalanceBreakdownScreen", { mode: "owe" })}
-              />
-            </View>
-
-            <Animated.View
-              entering={FadeInDown.delay(280)}
-              style={styles.sectionRow}
-            >
-              <Text style={styles.sectionTitle}>Your Groups</Text>
-              <Text style={styles.sectionLink}>See all</Text>
-            </Animated.View>
-          </>
+              {/* ── Section title ── */}
+              <Animated.View
+                entering={FadeInDown.delay(280)}
+                style={styles.sectionRow}
+              >
+                <Text style={styles.sectionTitle}>Your Groups</Text>
+                <Text style={styles.sectionLink}>See all</Text>
+              </Animated.View>
+            </>
           )
         }
         ListEmptyComponent={
-          loading ? (
-            null
-          ) : (
+          loading ? null : (
             <View style={styles.emptyState}>
               <Text style={styles.emptyTitle}>No groups yet</Text>
               <Text style={styles.emptyText}>
@@ -360,6 +485,7 @@ export default function HomeScreen({ navigation }) {
         }
       />
 
+      {/* ── FAB ── */}
       <TouchableOpacity
         activeOpacity={0.9}
         style={[styles.fab, { bottom: tabBarHeight + 22 }]}
@@ -371,6 +497,9 @@ export default function HomeScreen({ navigation }) {
   );
 }
 
+/*──────────────────────────────────────────────────────────────
+  Styles
+──────────────────────────────────────────────────────────────*/
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -450,12 +579,12 @@ const styles = StyleSheet.create({
   },
   statsRow: {
     flexDirection: "row",
-    justifyContent:"space-around",
+    justifyContent: "space-around",
     gap: 14,
     marginBottom: 26,
   },
   statCardWrap: {
-    width:"48%"
+    width: "48%",
   },
   statCard: {
     minHeight: 74,
@@ -478,12 +607,8 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "800",
   },
-  owedValue: {
-    color: "#34D399",
-  },
-  oweValue: {
-    color: "#F87171",
-  },
+  owedValue: { color: "#34D399" },
+  oweValue: { color: "#F87171" },
   sectionRow: {
     flexDirection: "row",
     justifyContent: "space-between",
